@@ -1,32 +1,6 @@
-# AWS ML Engineer Capstone Project
+# AWS ML Engineer Capstone Proposal
 
-Welcome to my capstone project for the Udacity AWS Machine Learning Course <https://www.udacity.com/enrollment/nd189>.
-
-For this project I'm going to explore some alternative ways of computing confidence for regression data and model prediction. The project is mostly about using AWS and deploying models that are a bit different from the standard XGBoost or Random Forest. 
-
-One of the models will be a **composite set** of models that computes quantile regression for targets and residuals. The second model will be a K Nearest Neighbors (KNN) model using Scikit-Learn.
-
-### Alternative Methods for Measuring Confidence
-
-1. **Prediction Intervals using Bootstrapping:**
-   - Bootstrapping involves repeatedly sampling from the training data and fitting the model multiple times to generate a distribution of predictions. This can be used to estimate prediction intervals and confidence intervals.
-   - **Advantages:** Robust and distribution-free. It provides a straightforward way to estimate uncertainty.
-   - **Drawbacks:** Computationally intensive and may require many iterations to get stable estimates.
-
-2. **Ensemble Methods (e.g., Random Forests, Gradient Boosting):**
-   - Ensemble methods like Random Forests inherently provide a measure of uncertainty by using multiple trees and averaging their predictions. The spread of predictions from different trees can be used to estimate confidence intervals.
-   - **Advantages:** Often more stable and less sensitive to individual outliers.
-   - **Drawbacks:** Can be computationally expensive and may require tuning to balance bias and variance.
-
-3. **Bayesian Methods:**
-   - Bayesian methods incorporate prior knowledge and provide a probabilistic framework for estimating uncertainty. Techniques like Bayesian Neural Networks or Gaussian Processes are commonly used.
-   - **Advantages:** Provides a principled approach to uncertainty estimation and incorporates prior knowledge.
-   - **Drawbacks:** Can be complex to implement and computationally demanding.
-
-4. **Quantile Regression Forests:**
-   - An extension of random forests that can provide quantile estimates for predictions.
-   - **Advantages:** Combines the benefits of quantile regression and ensemble methods.
-   - **Drawbacks:** Still computationally expensive and may require careful tuning.
+Welcome to the **PROPOSAL** for my capstone project for the Udacity AWS Machine Learning Course <https://www.udacity.com/enrollment/nd189>.
 
 ### Domain Background
 For many modeling domains the prevalent perspective is that more data is always better. I'd like to investigate whether using just the **high quality** data is better than using **all** of the data for training and modeling.
@@ -87,50 +61,3 @@ The project will develop and implement data quality/confidence models within the
 1. **Visualization and Reporting**: Create visualizations to illustrate the distribution of predictions and confidence levels, and compile a comprehensive report documenting the findings and insights from the project.
 
 By following this workflow, the project aims to deliver robust data quality/confidence models that enhance the interpretability and reliability of machine learning predictions in AWS.
-
-
-# Project Rubric
-This is the project rubric to make sure the project covers all the requirements.
-
-## Definition
-### Project Overview
-Student provides a high-level overview of the project in layman’s terms. Background information such as the problem domain, the project origin, and related data sets or input data is given.
-
-### Problem Statement
-The problem which needs to be solved is clearly defined. A strategy for solving the problem, including discussion of the expected solution, has been made.
-
-### Metrics
-Metrics used to measure the performance of a model or result are clearly defined. Metrics are justified based on the characteristics of the problem.
-
-## Analysis
-
-### Data Exploration
-If a dataset is present, features and calculated statistics relevant to the problem have been reported and discussed, along with a sampling of the data. In lieu of a dataset, a thorough description of the input space or input data has been made. Abnormalities or characteristics of the data or input that need to be addressed have been identified.
-
-### Exploratory Visualization
-A visualization has been provided that summarizes or extracts a relevant characteristic or feature about the dataset or input data with thorough discussion. Visual cues are clearly defined.
-
-### Algorithms and Techniques
-Algorithms and techniques used in the project are thoroughly discussed and properly justified based on the characteristics of the problem.
-
-### Benchmark
-Student clearly defines a benchmark result or threshold for comparing performances of solutions obtained.
-
-## Methodology
-
-### Data Preprocessing
-All preprocessing steps have been clearly documented. Abnormalities or characteristics of the data or input that needed to be addressed have been corrected. If no data preprocessing is necessary, it has been clearly justified.
-
-### Implementation
-The process for which metrics, algorithms, and techniques were implemented with the given datasets or input data has been thoroughly documented. Complications that occurred during the coding process are discussed.
-
-### Refinement
-The process of improving upon the algorithms and techniques used is clearly documented. Both the initial and final solutions are reported, along with intermediate solutions, if necessary.
-
-## Results
-
-### Model Evaluation and Validation
-The final model’s qualities—such as parameters—are evaluated in detail. Some type of analysis is used to validate the robustness of the model’s solution.
-
-### Justification
-The final results are compared to the benchmark result or threshold with some type of statistical analysis. Justification is made as to whether the final model and solution is significant enough to have adequately solved the problem.
