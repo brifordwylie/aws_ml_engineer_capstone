@@ -2,36 +2,26 @@
 
 Welcome to my capstone project for the Udacity AWS Machine Learning Course <https://www.udacity.com/enrollment/nd189>.
 
-For this project I'm going to explore some alternative ways of computing confidence for regression data and model prediction. The project is mostly about using AWS and deploying models that are a bit different from the standard XGBoost or Random Forest. 
+## Project Overview
 
-One of the models will be a **composite set** of models that computes quantile regression for targets and residuals. The second model will be a K Nearest Neighbors (KNN) model using Scikit-Learn.
+For this project I'm going to explore ways of computing confidence for regression model predictions. In particular we'd like to deploy 'sets of models' into AWS, ensembles for bootstrapping and quantile regression. Our model scripts and endpoints will use groups of models and provide additional information like prediction intervals and quantile ranges. We're also going to compare/contrast these against a KNN model for regression confidence metrics.
 
-### Alternative Methods for Measuring Confidence
+### Methods for Measuring Regression Confidence
 
-1. **Prediction Intervals using Bootstrapping:**
-   - Bootstrapping involves repeatedly sampling from the training data and fitting the model multiple times to generate a distribution of predictions. This can be used to estimate prediction intervals and confidence intervals.
-   - **Advantages:** Robust and distribution-free. It provides a straightforward way to estimate uncertainty.
-   - **Drawbacks:** Computationally intensive and may require many iterations to get stable estimates.
+1. **Prediction Intervals using Bootstrapping**
+   - Bootstrapping involves repeatedly sampling from the training data and fitting the model multiple times to generate a distribution of predictions. This can be used to estimate prediction intervals. This approach should be robust and doesn't make assumptions about a particular distribution. It should provide a straightforward way to estimate uncertainty.
 
-2. **Ensemble Methods (e.g., Random Forests, Gradient Boosting):**
-   - Ensemble methods like Random Forests inherently provide a measure of uncertainty by using multiple trees and averaging their predictions. The spread of predictions from different trees can be used to estimate confidence intervals.
-   - **Advantages:** Often more stable and less sensitive to individual outliers.
-   - **Drawbacks:** Can be computationally expensive and may require tuning to balance bias and variance.
+1. **Quantile Regression**
+   - A set of models with different objective functions that can provide quantile estimates for predictions. Combines the benefits of quantile regression and ensemble methods. We'll estimate a range of quantiles that should give us a 'spread' of target values within that region of feature space.
 
-3. **Bayesian Methods:**
+1. **Bayesian Methods**
    - Bayesian methods incorporate prior knowledge and provide a probabilistic framework for estimating uncertainty. Techniques like Bayesian Neural Networks or Gaussian Processes are commonly used.
-   - **Advantages:** Provides a principled approach to uncertainty estimation and incorporates prior knowledge.
-   - **Drawbacks:** Can be complex to implement and computationally demanding.
 
-4. **Quantile Regression Forests:**
-   - An extension of random forests that can provide quantile estimates for predictions.
-   - **Advantages:** Combines the benefits of quantile regression and ensemble methods.
-   - **Drawbacks:** Still computationally expensive and may require careful tuning.
+
 
 ### Domain Background
-For many modeling domains the prevalent perspective is that more data is always better. I'd like to investigate whether using just the **high quality** data is better than using **all** of the data for training and modeling.
 
-Within the domain of drug discovery, training data often comes from bench experiments where a property like solubility is measured. As part of the data collection, there is often **systematic noise** where measurement variability is expected. There can also be anomalies associated with measurement errors or data entry issues. For all of these scenarios, we'd like to provide a set of data quality models that together will provide a data confidence score for each observation.
+Within the domain of **drug discovery**, training data often comes from bench experiments where a property like solubility is measured. As part of the data collection, there is often **systematic noise** where measurement variability is expected. There can also be anomalies associated with measurement errors or data entry issues. For all of these scenarios, we'd like to provide a set of data quality models that together will provide a data confidence score for each observation.
 
 For this project, I'm going to use the AQSol public data as a representative dataset. For more information and details please see [Datasets and Inputs](#datasets-and-inputs).
 
