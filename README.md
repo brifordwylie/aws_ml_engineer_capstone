@@ -3,53 +3,123 @@
 Welcome to my capstone project for the Udacity AWS Machine Learning Course <https://www.udacity.com/enrollment/nd189>.
 
 ## Project Overview
+For this project we're going to explore ways of computing confidence for regression model predictions. In particular we'd like to deploy 'sets of models' into AWS, ensembles for bootstrapping and quantile regression. Our model scripts and AWS endpoints will use groups of models and provide additional information like prediction intervals and quantile ranges. We're also going to compare/contrast these against a KNN model for regression confidence metrics.
 
-For this project I'm going to explore ways of computing confidence for regression model predictions. In particular we'd like to deploy 'sets of models' into AWS, ensembles for bootstrapping and quantile regression. Our model scripts and endpoints will use groups of models and provide additional information like prediction intervals and quantile ranges. We're also going to compare/contrast these against a KNN model for regression confidence metrics.
+## Datasets and Inputs
+For this project, we're going to use the publicly available AqSol Database [1]. This is a curated reference set of aqueous solubility, created by the Autonomous Energy Materials Discovery [AMD] research group, consists of aqueous solubility values of 9,982 unique compounds curated from 9 different publicly available aqueous solubility datasets. AqSolDB also contains some relevant topological and physico-chemical 2D descriptors. Additionally, AqSolDB contains validated molecular representations of each of the compounds.
 
-### Methods for Measuring Regression Confidence
+Data Download from the Harvard DataVerse: <https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/OVHAW8>
+
+
+## Problem Statement
+Within the domain of **drug discovery**, data used for model training often comes from bench experiments where a property like solubility is measured. As part of the data collection, there is often **noise** associated with the measurement, differences in temperature, pH, and extraction procedures can lead to variability. Also compounds can hit activity cliffs (see [2][3][4]) where a small molecular change can lead to a significant difference in the response variable. For all of these scenarios, we'd like to provide a set of models that together will provide both a regression prediction and confidence score for each observation.
+
+## Metrics
+We'd like our confidence metric to capture areas in feature space where the model is more or less confident in it's predictions. In areas of high confidence we'd expect to have smaller errors and in areas of low confidence we'd expect to see larger errors. We'll use statistics and boxplots that capture the prediction errors.
+
+The metrics will include standard descriptive statistics about each of the confidence 'bands' (low, medium, and high). 
+
+- min/max
+- mean
+- stddev
+- Q1, Q2, Q3, IQR
+
+The delination of the confidence bands (low, medium, and high) will be as follows:
+
+- **Low** (0.0 to 0.33)
+- **Medium** (0.33 to 0.66)
+- **High** (0.66 to 1.0)
+
+The calculation of the confidence score will be domain specific, meaning that for our particular dataset and target values will look at the ensemble model outputs and determine a heuristic for a confidence score that ranges from 0.0 to 1.0.
+
+# Analysis
+
+## Data Exploration
+**Dataset:** For this project, we're using the AQSol public data as a representative dataset. For more information and details please see [Datasets and Inputs](##datasets-and-inputs).
+
+### Data Statistics
+- **Rows:** 9982
+- **Target Column:** solubility
+- **Feature Columns:** 17
+- **Features:** molwt, mollogp, molmr, heavyatomcount, numhacceptors, numhdonors, numheteroatoms, numrotatablebonds, numvalenceelectrons, numaromaticrings, numsaturatedrings, numaliphaticrings, ringcount, tpsa, labuteasa, balabanj, bertzct
+
+
+**Target: solubility**
+<table>
+<tr>
+
+<td>
+<img src="images/solubility_boxplot.png" alt="sol_box_plot" width="1200"/>
+</td>
+<td>
+
+```
+fs.descriptive_stats()["solubility"]
+
+Out[36]:
+{'min': -13.1719,
+ 'q1': -4.318666603641981,
+ 'median': -2.6081432110925657,
+ 'q3': -1.213113009169698,
+ 'max': 2.1376816201,
+ 'mean': -2.8899088047869865,
+ 'stddev': 2.368154448407012}
+``` 
+ 
+</td>
+
+</tr>
+</table>
+
+**Feature Distributions**
+<img src="images/feature_distributions.png" alt="sol_box_plot" width="1200"/>
+
+**Sample Rows**
+
+```
+[●●●]Workbench:scp_sandbox> df[comp_columns]
+Out[41]:
+      solubility    molwt  mollogp     molmr  heavyatomcount  numhacceptors  ...  ringcount    tpsa   labuteasa      balabanj      bertzct  solubility_class
+0      -5.921700  197.064  4.14660   53.9680            12.0            0.0  ...        2.0    0.00   80.719600  2.797846e+00   384.358135               low
+1      -5.984242  236.270  3.02440   69.1270            18.0            2.0  ...        3.0   34.14  105.265479  2.268429e+00   668.547220               low
+2      -6.384617  242.447  5.72400   77.5710            17.0            1.0  ...        0.0    9.23  109.326928  2.846262e+00   108.693586               low
+3      -3.591300  421.422  1.62540   90.6954            27.0            5.0  ...        3.0  118.36  153.035266  2.108091e+00  1085.280492              high
+4      -2.800100  100.014  1.99100   11.4580             6.0            0.0  ...        0.0    0.00   31.076732  3.675949e+00    55.617271              high
+...          ...      ...      ...       ...             ...            ...  ...        ...     ...         ...           ...          ...               ...
+9977   -3.951281  269.059  1.66150   56.1384            16.0            5.0  ...        1.0   74.44  100.246449  2.931415e+00   428.234717              high
+9978   -1.657600  146.149  1.33540   41.2028            11.0            3.0  ...        2.0   46.01   63.346597  2.913161e+00   381.253771              high
+9979   -1.020815  482.584  3.06140  121.8500            32.0           10.0  ...        3.0  127.73  190.866146  5.344871e-07  1146.856409              high
+9980    0.938623  115.180  0.04437   35.1007             8.0            1.0  ...        0.0   30.33   50.404038  3.651234e+00    75.674572              high
+9981   -6.964446  368.558  6.58950  107.4476            26.0            2.0  ...        0.0   74.60  159.624944  3.369474e+00   376.338537               low
+```
+
+
+## Exploratory Visualization
+Our main goal here is to use AWS **ensemble** models to help us identify areas of feature space where the model has high or low confidence in its predictions. To help us visualize the feature space we'll use the UMAP[5] projection algorithm to project the 17 dimenional feature space down to 2.
+
+
+<figure>
+  <img src="images/umap_sol.png" alt="UMAP solubility plot" width="1200"/>
+  <figcaption><em>UMAP projection of 17 dimensional feature space showing logS solubility of each compound (n=9982)</em></figcaption>
+</figure>
+
+In the image above we can see that some areas have a relatively low target variance and standard regression models (like XGBRegressor) should be able to make relatively accurate predictions in those areas. We also some some areas with higher variance that may indicate compounds on activity cliffs, noisy experimental measurements, or simply mislabeled solubility metrics.
+
+
+## Algorithms and Techniques
 
 1. **Prediction Intervals using Bootstrapping**
-   - Bootstrapping involves repeatedly sampling from the training data and fitting the model multiple times to generate a distribution of predictions. This can be used to estimate prediction intervals. This approach should be robust and doesn't make assumptions about a particular distribution. It should provide a straightforward way to estimate uncertainty.
-
+   - Bootstrapping involves repeatedly sampling from the training data and fitting the model multiple times to generate a distribution of predictions. This can be used to estimate prediction intervals. This approach should be robust and doesn't make assumptions about a particular distribution. 
+  
 1. **Quantile Regression**
    - A set of models with different objective functions that can provide quantile estimates for predictions. Combines the benefits of quantile regression and ensemble methods. We'll estimate a range of quantiles that should give us a 'spread' of target values within that region of feature space.
-
-1. **Bayesian Methods**
-   - Bayesian methods incorporate prior knowledge and provide a probabilistic framework for estimating uncertainty. Techniques like Bayesian Neural Networks or Gaussian Processes are commonly used.
-
-
-
-### Domain Background
-
-Within the domain of **drug discovery**, training data often comes from bench experiments where a property like solubility is measured. As part of the data collection, there is often **systematic noise** where measurement variability is expected. There can also be anomalies associated with measurement errors or data entry issues. For all of these scenarios, we'd like to provide a set of data quality models that together will provide a data confidence score for each observation.
-
-For this project, I'm going to use the AQSol public data as a representative dataset. For more information and details please see [Datasets and Inputs](#datasets-and-inputs).
-
-### Problem Statement
-There are modeling domains where the training data is inherently noisy. This noise may come from expected measurement variability or from errors in the measurement or issues with data entry. When this data is used for model training, we're often including **latent errors** in our training set without any sort of notification or visibility into the problematic observations. We propose that it's better to have less data of **high quality** than more data of unknown quality.
-
-## Solution Statement
-
-This project proposes the following solutions:
-
-We'll use data confidence scoring to improve our modeling pipeline in two ways:
-
-- Confidence scores for existing models: We'll provide a 'harness' where the predictions run on existing models can be given a complimentary confidence metric.
-- High Quality Data Models: We'll construct a new model that only uses high quality data and compare the performance of that model to the existing model that uses all the data.
-
-For this project, I'd like to create and deploy data quality models using AWS infrastructure. These models will provide various data quality metrics for feature space data distributions, neighborhood quality, and residuals.
 
 1. **Quantile Regression + Residuals Model**: This model will provide predictions at different quantiles, offering a broader sense of the distribution within the training data. It will help in understanding the range and variability of predictions. Included as part of this functionality is the computation of residuals for all of the observations (using 5-Fold Cross validation and aggregating the results).
 1. **K-Nearest Neighbors (KNN) Model**: This model will use the distances to the nearest neighbors in the feature space. Observations that have close neighbors with low variance in their target values will have higher neighborhood 'quality' levels, while those in high variance neighborhoods or sparse regions will have lower quality levels.
 
 These models and endpoints will be implemented using AWS SageMaker, leveraging its robust infrastructure for training, deploying, and scaling machine learning models.
 
-## Datasets and Inputs
-For this project, we're going to use the publicly available AqSol Database. This is a curated reference set of aqueous solubility, created by the Autonomous Energy Materials Discovery [AMD] research group, consists of aqueous solubility values of 9,982 unique compounds curated from 9 different publicly available aqueous solubility datasets. AqSolDB also contains some relevant topological and physico-chemical 2D descriptors. Additionally, AqSolDB contains validated molecular representations of each of the compounds.
 
-Main Reference: <https://www.nature.com/articles/s41597-019-0151-1>
-
-Data Download from the Harvard DataVerse: <https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/OVHAW8>
 
 ## Benchmark Model
 
@@ -124,3 +194,14 @@ The final model’s qualities—such as parameters—are evaluated in detail. So
 
 ### Justification
 The final results are compared to the benchmark result or threshold with some type of statistical analysis. Justification is made as to whether the final model and solution is significant enough to have adequately solved the problem.
+
+# References
+1. Sorkun, M. C., Khetan, A., & Er, S. (2019). *AqSolDB: A curated reference set of aqueous solubility and 2D descriptors for a diverse set of compounds*. Scientific Data, 6, 143. [https://doi.org/10.1038/s41597-019-0151-1](https://doi.org/10.1038/s41597-019-0151-1). Dataset: [https://doi.org/10.7910/DVN/OVHAW8](https://doi.org/10.7910/DVN/OVHAW8)
+
+2. Wang, Z., Zhang, Y., & Xu, J. (2024). *Activity Cliff-Informed Contrastive Learning for Molecular Property Prediction*. PLoS Computational Biology. [PMC11643338](https://pmc.ncbi.nlm.nih.gov/articles/PMC11643338)
+
+3. Stumpfe, D., & Bajorath, J. (2019). *Evolving Concept of Activity Cliffs*. ACS Omega, 4(1), 14360–14368. [https://doi.org/10.1021/acsomega.9b02221](https://pubs.acs.org/doi/10.1021/acsomega.9b02221)
+
+4. Mayr, A., Klambauer, G., & Hochreiter, S. (2023). *Exploring QSAR Models for Activity-Cliff Prediction*. Journal of Cheminformatics, 15(1), 1–14. [https://doi.org/10.1186/s13321-023-00708-w](https://jcheminf.biomedcentral.com/articles/10.1186/s13321-023-00708-w)
+
+5. McInnes, L., Healy, J., & Melville, J. (2018). *UMAP: Uniform Manifold Approximation and Projection for Dimension Reduction*. arXiv:1802.03426. [https://arxiv.org/abs/1802.03426](https://arxiv.org/abs/1802.03426). GitHub: https://github.com/lmcinnes/umap
