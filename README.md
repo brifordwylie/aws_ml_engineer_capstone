@@ -292,9 +292,133 @@ def predict_fn(df, models) -> pd.DataFrame:
 
 
 
-1. **Prediction Intervals using Bootstrapping**
+### Prediction Intervals using Bootstrapping
 
-The Model Script for this **ensemble** model is here:
+The full Model Script for this **ensemble** model is here: [ensemble_bootstrap](https://github.com/brifordwylie/aws_ml_engineer_capstone/blob/main/model_scripts/ensemble_xgb/ensemble_xgb.py). The model script follows many of the general entry points above. Here are some of the relevant details for the creation of 10 'bootstrapped' models. The challenge here was obviously training, saving, loading, and predicting against 10 different models. 
+
+**Training**
+
+```
+# Train 10 models with random 80/20 splits of the data
+for model_id in range(10):
+    # Model Name
+    model_name = f"m_{model_id:02}"
+
+    # Randomly split the data into train and test sets
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
+    print(f"Training Model {model_name} with {len(X_train)} rows")
+    params = {"objective": "reg:squarederror"}
+    model = xgb.XGBRegressor(**params)
+    model.fit(X_train, y_train)
+
+    # Store the model
+    models[model_name] = model
+```
+
+**Inference/Loading Models**
+
+```
+# Load ALL the models from the model directory
+models = {}
+for file in os.listdir(model_dir):
+    if file.startswith("m_") and file.endswith(".json"):  # The Quantile models
+        # Load the model
+        model_path = os.path.join(model_dir, file)
+        print(f"Loading model: {model_path}")
+        model = xgb.XGBRegressor()
+        model.load_model(model_path)
+
+        # Store the model
+        m_name = os.path.splitext(file)[0]
+        models[m_name] = model
+```
+
+**Inference/Prediction**
+
+Since we loaded the model (above) into a dictionary of models it made the predictions fairly straight forward.
+
+```
+# Predict the features against all the models
+for name, model in models.items():
+    df[name] = model.predict(matched_df[model_features])
+```
+
+**Outputs**
+
+The outputs from the Endpoint has the output of all 10 models. These output can be used to compute a prediction interval for each prediction.
+
+```
+        id      m_00      m_01      m_02      m_03      m_04      m_05      m_06      m_07      m_08      m_09  solubility  residuals
+0    H-450 -7.016055 -7.259755 -7.145797 -6.947074 -6.958017 -7.003732 -6.958448 -7.012415 -7.026974 -6.952472       -6.94   0.184727
+1   B-3169 -7.016055  -7.03502 -6.979581 -6.905605 -7.107079 -7.003732 -6.958448 -6.890439 -7.003515 -6.937048     -6.9069   -0.01326
+2   B-4093  -7.12962 -7.213452 -7.231046 -7.310788  -7.13347  -7.15819  -7.09764 -7.069907  -7.40312 -7.103029     -7.7699  -0.626903
+3   B-2885 -7.016055  -7.03502 -6.979581 -7.057226 -7.031295 -7.003732 -6.958448 -6.890439 -6.946234 -6.937048     -7.0199  -0.106015
+4   B-4094  -7.12962 -7.213452 -7.128245 -7.474997 -7.002088  -7.15819  -7.09764 -7.069907 -7.213766 -7.103029     -6.8754   0.267597
+5    C-718 -6.914408  -7.03502 -7.048625 -7.057226 -7.050063 -7.003732 -6.958448 -6.890439 -6.946234  -7.00981       -7.26  -0.290513
+6   B-3202 -6.892575  -7.03502 -7.048625 -7.057226 -7.002088 -7.003732 -6.958448 -6.890439 -6.969693  -7.00981       -6.77   0.127826
+7   B-4092 -6.801861 -7.213452 -7.048625 -7.286277 -7.020856 -7.003732 -7.017329 -7.061284 -6.969693 -7.088557     -6.8526   0.045226
+8   B-3191 -6.914408  -7.03502 -7.048625 -7.057226 -7.020856 -7.003732 -6.958448 -6.890439 -6.987513  -7.00981     -7.1299  -0.160413
+9   B-2811 -6.914408  -7.03502 -7.048625 -7.057226 -7.050063 -7.003732 -6.958448 -6.890439 -6.946234  -7.00981     -6.6813   0.288187
+10  B-3201 -6.914408  -7.03502 -7.048625 -7.057226 -7.050063 -7.003732 -6.958448 -6.890439 -6.946234  -7.00981       -6.77   0.199487
+```
+
+
+### Quantile Regressor
+
+The full Model Script for this **quantile regressor** model is here: [quantile_regressor](https://github.com/brifordwylie/aws_ml_engineer_capstone/blob/main/model_scripts/quant_regression/quant_regression.py). Here are some of the relevant details for the creation of quantile regressor models. Specifically we use the **reg:quantileerrro** objective function, we create 5 seperate model for the following quantiles **[0.10, 0.25, 0.50, 0.75, 0.90]**
+
+```
+quantiles = [0.10, 0.25, 0.50, 0.75, 0.90]
+q_models = {}
+...
+
+# Train models for each of the quantiles
+for q in quantiles:
+    params = {
+        "objective": "reg:quantileerror",
+        "quantile_alpha": q,
+    }
+    model = xgb.XGBRegressor(**params)
+    model.fit(X, y)
+
+    # Convert quantile to string
+    q_str = f"q_{int(q * 100):02}"
+
+    # Store the model
+    q_models[q_str] = model
+```
+
+We follow a similar pattern where we save the model and then load them in during endpoint inference and predict against all the models.
+
+**Outputs**
+The outputs from this model include the following quantiles **[0.10, 0.25, 0.50, 0.75, 0.90]**. The output also include **IQR** Inner Quartile Range (q_75-q_25) and **IDR** which is the Inner Decile Range (the difference between q_10 and q_90), it gives you an estimate of the entire span of all the target values in that region.
+
+```
+[●●●]Workbench:scp_sandbox> quant_df[quant_show]
+Out[67]:
+        id      q_10      q_25      q_50      q_75      q_90       iqr       idr  prediction  solubility  residuals
+0   A-2232  -7.64602 -5.080912 -4.711096 -3.999644 -3.357492  1.081267  4.288528   -5.801939   -6.680445  -0.878507
+1    A-690 -6.745965 -4.733729 -4.453765 -3.881248 -3.227552  0.852481  3.518413   -5.084425   -4.701186   0.383239
+2    C-987 -5.953816 -4.757437 -4.470902 -3.606793 -2.970807  1.150644  2.983008   -4.617952       -4.74  -0.122048
+3   C-2449  -6.34855 -5.794905 -5.082012 -4.740721 -3.539795  1.054184  2.808755   -4.852782       -5.84  -0.987218
+4    F-999 -6.398141 -4.438383 -4.733964 -3.994623 -3.526953   0.44376  2.871188    -4.61281       -3.96    0.65281
+5    B-873 -7.745192 -6.920116 -6.379264 -5.322877 -3.990977  1.597239  3.754215   -6.401119     -6.5727  -0.171581
+6   B-2020 -6.858561 -6.204701 -5.676304 -4.276959  -4.14386  1.927742  2.714701   -4.853285     -3.5738   1.279485
+7   C-2396  -6.43478 -5.252554 -5.186502 -4.007359 -3.740023  1.245195  2.694756   -4.748798       -3.85   0.898798
+8   C-2463  -6.56106 -5.323305 -5.231742 -4.433026 -3.764848  0.890279  2.796212   -4.514942       -4.13   0.384942
+9    F-838 -5.965605 -5.662756 -5.592986 -4.487374 -3.785937  1.175383  2.179669   -5.646573       -5.09   0.556573
+10  B-2235 -5.625131 -4.662147 -3.869359 -3.541233  -3.22161  1.120913  2.403521   -3.662866     -3.9031  -0.240234
+11  C-1012 -6.029509  -4.84484 -4.574955 -3.780015  -3.05753  1.064825  2.971979   -4.493772        -3.6   0.893772
+12  C-2350 -5.809307 -5.230641 -4.826998 -4.205239 -3.261495  1.025402  2.547811   -4.513793       -3.76   0.753793
+13   B-872 -7.745192 -6.920116 -6.379264 -5.322877 -3.990977  1.597239  3.754215   -6.401119     -5.8957   0.505419
+14  C-1018 -6.356013 -5.332912 -4.772804 -4.077983 -3.549013  1.254929  2.807001   -4.888631       -5.21  -0.321369
+15  B-1540 -6.967558 -6.360556 -5.682418 -4.648727 -3.865636  1.711829  3.101922   -6.000487     -7.1031  -1.102613
+16   C-948   -5.6817  -4.01971 -3.827436 -3.338722  -2.42288  0.680988  3.258819   -3.872794        -4.0  -0.127206
+17  C-1037 -6.372856 -5.500494 -4.997159 -4.657032 -3.759637  0.843461  2.613219   -4.672111       -4.08   0.592111
+18   A-886 -6.221915 -5.360593 -4.667631 -4.204701 -3.116444  1.155892  3.105471    -4.69916   -4.891656  -0.192496
+19  A-3067 -6.712882 -5.567425 -4.927672 -3.979314 -3.131096  1.588111  3.581786   -4.856071   -4.867097  -0.011026
+```
+
 
   
 1. **Quantile Regression**
