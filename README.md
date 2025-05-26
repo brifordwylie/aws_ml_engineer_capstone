@@ -35,7 +35,7 @@ The calculation of the confidence score will be domain specific, meaning that fo
 # Analysis
 
 ## Data Exploration
-**Dataset:** For this project, we're using the AQSol public data as a representative dataset. For more information and details please see [Datasets and Inputs](##datasets-and-inputs).
+**Dataset:** For this project, we're using the AQSol public data as a representative dataset. For more information and details please see [Datasets and Inputs](#datasets-and-inputs).
 
 ### Data Statistics
 - **Rows:** 9982
@@ -131,10 +131,9 @@ Although this project will strictly be using regression models, here we want to 
    - Bootstrapping involves repeatedly sampling from the training data and fitting the model multiple times to generate a distribution of predictions. This can be used to estimate prediction intervals. This approach should be robust and doesn't make assumptions about a particular distribution. 
   
 1. **Quantile Regression**
-   - A set of models with different objective functions that can provide quantile estimates for predictions. Combines the benefits of quantile regression and ensemble methods. We'll estimate a range of quantiles that should give us a 'spread' of target values within that region of feature space.
+   - A set of models with different objective functions that can provide quantile estimates for predictions, offering a broader sense of the distribution within the training data. It will help in understanding the range and variability of predictions. We'll estimate a range of quantiles that should give us a 'spread' of target values within that region of feature space.
 
-1. **Quantile Regression + Residuals Model**: This model will provide predictions at different quantiles, offering a broader sense of the distribution within the training data. It will help in understanding the range and variability of predictions. Included as part of this functionality is the computation of residuals for all of the observations (using 5-Fold Cross validation and aggregating the results).
-1. **K-Nearest Neighbors (KNN) Model**: This model will use the distances to the nearest neighbors in the feature space. Observations that have close neighbors with low variance in their target values will have higher neighborhood 'quality' levels, while those in high variance neighborhoods or sparse regions will have lower quality levels.
+1. **K-Nearest Neighbors (KNN) Model**: This model will use the distances to the nearest neighbors in feature space. Observations that have close neighbors with low variance in their target values will have higher confidence values, while those in high variance neighborhoods or sparse regions will have lower confidence.
 
 These models and endpoints will be implemented using AWS SageMaker, leveraging its robust infrastructure for training, deploying, and scaling machine learning models.
 
@@ -142,77 +141,180 @@ These models and endpoints will be implemented using AWS SageMaker, leveraging i
 
 ## Benchmark Model
 
-For the benchmark model, we'll use the AWS Linear Learner model. This model will provide point predictions without any data quality or confidence estimates, serving as a baseline to compare the performance against the evaluation metrics defined below.
-
-## Evaluation Metrics
-
-The performance of both the benchmark model and the proposed data quality models will be evaluated using the following metrics:
+In this case we're adding a confidence score to our regression model. For the benchmark model, we'll use a standard XGBRegressor() model. This model will provide point predictions without any confidence estimates, serving as a baseline. Our metrics of comparison will include:
 
 - **Mean Absolute Error (MAE)**: To measure the accuracy of the point predictions. We'll measure the benchmark model with ALL the data (80/20 split), and then we'll partition the data into 3 segments: high, medium, and low quality. The MAE on 80/20 splits will be provided for the 4 categories: all, high, med, and low.
-- **ROC Curves/AUC**: Similar to the MAE, we provide a ROC curve plot (with AUC scores) for each of the 4 categories (all, high, med, low). Since ROC curves are traditionally used with classification data, we'll employ an 'Accurate' column that looks at the residuals and if they are less than some delta then we'll consider the prediction as an accurate prediction. **Example:** For LogS solubility we might define any prediction within 0.5 log units as being an accurate prediction. This will be a parameter that can be adjusted for different use cases.
 
-## Project Design
+- **Residual Box Plots**: To provide an overview of the predictions within our confidence levels we'll show box plots of the residuals for each confidence level. The box plots should show tighter bounds on the residuals for areas of high confidence.
+  
+- **(Maybe) ROC Curves/AUC**: Similar to the MAE, we provide a ROC curve plot (with AUC scores) for each of the 4 categories (all, high, med, low). Since ROC curves are traditionally used with classification data, we'll employ an 'Accurate' column that looks at the residuals and if they are less than some delta then we'll consider the prediction as an accurate prediction. **Example:** For LogS solubility we might define any prediction within 0.5 log units as being an accurate prediction. This will be a parameter that can be adjusted for different use cases.
 
-The project will develop and implement data quality/confidence models within the AWS SageMaker environment.
+# Methodology
 
-1. **AQSol Public Data**: We'll use the Aqueous Solubility public dataset to provide an example of realistic data that contains inherent noise in the target variable (Solubility).
+## Data Preprocessing
+
+We're using the Aqueous Solubility public dataset to provide an example of realistic data that contains inherent noise in the target variable (Solubility). We first pushed the CSV file onto an S3 bucket and then loaded the data into AWS Athena, making sure that the types were correct and running a few queries.
+
+
+<figure>
+  <img src="images/aqsol_data_in_athena.png" alt="sol_box_plot" width="1200"/>
+  <figcaption><em>AQSol Data in AWS Athena</em></figcaption>
+</figure>
+
+Once the data is available through AWS Athena we can query it directly from Python using AWSWrangler.
+
+```
+df = wr.athena.read_sql_query(
+    sql="select * from aqsol_data",
+    database=database,
+    ctas_approach=False,
+    boto3_session=my_boto3_session,
+)
+
+        id                                               name  ...      bertzct solubility_class
+0      A-3         N,N,N-trimethyloctadecan-1-aminium bromide  ...   210.377334             high
+1      A-4                           Benzo[cd]indol-2(1H)-one  ...   511.229248             high
+2      A-5                               4-chlorobenzaldehyde  ...   202.661065             high
+3      A-8  zinc bis[2-hydroxy-3,5-bis(1-phenylethyl)benzo...  ...  1964.648666             high
+4      A-9  4-({4-[bis(oxiran-2-ylmethyl)amino]phenyl}meth...  ...   769.899934           medium
+...    ...                                                ...  ...          ...              ...
+9977  I-84                                         tetracaine  ...   374.236893             high
+9978  I-85                                       tetracycline  ...  1148.584975             high
+9979  I-86                                             thymol  ...   251.049732             high
+9980  I-93                                          verapamil  ...   938.203977             high
+9981  I-94                                           warfarin  ...   909.550973           medium
+```
+We can also inspect all the data types to make sure our S3 data and load into Athena worked correctly.
+
+```
+df.info()
+<class 'pandas.core.frame.DataFrame'>
+RangeIndex: 9982 entries, 0 to 9981
+Data columns (total 27 columns):
+ #   Column               Non-Null Count  Dtype
+---  ------               --------------  -----
+ 0   id                   9982 non-null   string
+ 1   name                 9982 non-null   string
+ 2   inchi                9982 non-null   string
+ 3   inchikey             9982 non-null   string
+ 4   smiles               9982 non-null   string
+ 5   solubility           9982 non-null   float64
+ 6   sd                   9982 non-null   float64
+ 7   ocurrences           9982 non-null   Int64
+ 8   group                9982 non-null   string
+ 9   molwt                9982 non-null   float64
+ 10  mollogp              9982 non-null   float64
+ 11  molmr                9982 non-null   float64
+ 12  heavyatomcount       9982 non-null   float64
+ 13  numhacceptors        9982 non-null   float64
+ 14  numhdonors           9982 non-null   float64
+ 15  numheteroatoms       9982 non-null   float64
+ 16  numrotatablebonds    9982 non-null   float64
+ 17  numvalenceelectrons  9982 non-null   float64
+ 18  numaromaticrings     9982 non-null   float64
+ 19  numsaturatedrings    9982 non-null   float64
+ 20  numaliphaticrings    9982 non-null   float64
+ 21  ringcount            9982 non-null   float64
+ 22  tpsa                 9982 non-null   float64
+ 23  labuteasa            9982 non-null   float64
+ 24  balabanj             9982 non-null   float64
+ 25  bertzct              9982 non-null   float64
+ 26  solubility_class     9982 non-null   string
+dtypes: Int64(1), float64(19), string(7)
+memory usage: 2.1 MB
+```
+
+### Descriptive Statistics
+The AWS Athena SQL engine allows you to make queries for descriptive statistics (like box plots). Here an example:
+
+```
+query = 'SELECT min("solubility") AS "min", 
+         approx_percentile("solubility", 0.25) AS "q1", 
+         approx_percentile("solubility", 0.5) AS "median",
+         approx_percentile("solubility", 0.75) AS "q3",
+         max("solubility") AS "max" from aqsol_data'
+
+ds.query(query)
+Out[13]:
+       min        q1    median        q3       max
+0 -13.1719 -4.332174 -2.611036 -1.194223  2.137682
+```
+We use these Athena queries to create these distribution plots using Dash/Plotly [6][7]. They are called violin plots and use a combination of the 'box-plot' queries above and smart-sample to create each plot.
+
+<figure>
+  <img src="images/violin_explanation.png" alt="sol_box_plot" width="1200"/>
+  <figcaption><em>Example of how we use Athena Queries to create the data for Violin Plots in Plotly</em></figcaption>
+</figure>
+
+<figure>
+  <img src="images/feature_distributions.png" alt="sol_box_plot" width="1200"/>
+  <figcaption><em>Violin Plots of the distributions of the target variable (solubility) and features of the AQSol Public Dataset </em></figcaption>
+</figure>
+
+
+## Implementation
+
+The project has developed a set of regression models within the AWS SageMaker environment. In addition to point predictions these models provide additional data about distributions and prediction intervals that allow us to assign a confidence metric to each regression prediction.
+
+### AWS Model Script Overview
+AWS Model Scripts have a general set of entry points that AWS uses for both **training** the model and running **inference** on the deployed AWS endpoint. Note: After training and deploying lots of AWS models, I've standardized on using Pandas DataFrames for 'data interchange' points.
+
+```
+# The main function is used during the **training** of models
+if __name__ == "__main__":
+
+    
+    # Typically use argparse/env vars to pull in 
+    # - SM_MODEL_DIR (where to put your model)
+    # - SM_CHANNEL_TRAIN (where to get your training data)
+    # - SM_OUTPUT_DATA_DIR (optional: output data like validation predictions, etc)
+    
+    # Main Training
+    # - Read in Training Data
+    # - Train model: model.fit(X_train, y_train)
+    # - Validation metrics
+    # - Save Model (also label encoders, feature arrays, etc)
+
+
+# The rest of the functions are used for Endpoint Inference
+def model_fn(model_dir):
+    """Deserialized and return model(s) from the model directory."""
+
+def input_fn(input_data, content_type) -> pd.DataFrame:
+    """Parse input data (csv/json) and return a DataFrame."""
+
+def output_fn(output_df, accept_type):
+    """Convert DataFrame to CSV or JSON output formats."""
+
+def predict_fn(df, models) -> pd.DataFrame:
+    """Make Predictions with our Model(s) and return a Dataframe"""
+```
+
+
+
+1. **Prediction Intervals using Bootstrapping**
+
+The Model Script for this **ensemble** model is here:
+
+  
+1. **Quantile Regression**
+   - A set of models with different objective functions that can provide quantile estimates for predictions, offering a broader sense of the distribution within the training data. It will help in understanding the range and variability of predictions. We'll estimate a range of quantiles that should give us a 'spread' of target values within that region of feature space.
+
+1. **K-Nearest Neighbors (KNN) Model**: This model will use the distances to the nearest neighbors in the feature space. Observations that have close neighbors with low variance in their target values will have higher confidence values, while those in high variance neighborhoods or sparse regions will have lower confidence.
+
+
 
 1. **Model Training**: Will use the AWS SageMaker model training functionality to train our two data quality models.
    - **Quantile Regression + Residuals**: Model to predict different quantiles of the target variable. This model will also compute residuals as described above.
    - **K-Nearest Neighbors (KNN) Model**: Develop a KNN-based model to estimate confidence levels based on the density and variability of observations in the feature space.
 
-1. **Endpoint Deployment**: Deploy the models on AWS SageMaker, setting up endpoints for real-time predictions and confidence estimates.
+1. **Endpoint Deployment**: Deploy the models on AWS SageMaker, setting up serverless endpoints for predictions and confidence estimates.
 1. **Model Evaluation**: Evaluate the models using the defined metrics, comparing them against the benchmark model.
 1. **Visualization and Reporting**: Create visualizations to illustrate the distribution of predictions and confidence levels, and compile a comprehensive report documenting the findings and insights from the project.
 
 By following this workflow, the project aims to deliver robust data quality/confidence models that enhance the interpretability and reliability of machine learning predictions in AWS.
 
 
-# Project Rubric
-This is the project rubric to make sure the project covers all the requirements.
-
-## Definition
-### Project Overview
-Student provides a high-level overview of the project in layman’s terms. Background information such as the problem domain, the project origin, and related data sets or input data is given.
-
-### Problem Statement
-The problem which needs to be solved is clearly defined. A strategy for solving the problem, including discussion of the expected solution, has been made.
-
-### Metrics
-Metrics used to measure the performance of a model or result are clearly defined. Metrics are justified based on the characteristics of the problem.
-
-## Analysis
-
-### Data Exploration
-If a dataset is present, features and calculated statistics relevant to the problem have been reported and discussed, along with a sampling of the data. In lieu of a dataset, a thorough description of the input space or input data has been made. Abnormalities or characteristics of the data or input that need to be addressed have been identified.
-
-### Exploratory Visualization
-A visualization has been provided that summarizes or extracts a relevant characteristic or feature about the dataset or input data with thorough discussion. Visual cues are clearly defined.
-
-### Algorithms and Techniques
-Algorithms and techniques used in the project are thoroughly discussed and properly justified based on the characteristics of the problem.
-
-### Benchmark
-Student clearly defines a benchmark result or threshold for comparing performances of solutions obtained.
-
-## Methodology
-
-### Data Preprocessing
-All preprocessing steps have been clearly documented. Abnormalities or characteristics of the data or input that needed to be addressed have been corrected. If no data preprocessing is necessary, it has been clearly justified.
-
-### Implementation
-The process for which metrics, algorithms, and techniques were implemented with the given datasets or input data has been thoroughly documented. Complications that occurred during the coding process are discussed.
-
-### Refinement
-The process of improving upon the algorithms and techniques used is clearly documented. Both the initial and final solutions are reported, along with intermediate solutions, if necessary.
-
-## Results
-
-### Model Evaluation and Validation
-The final model’s qualities—such as parameters—are evaluated in detail. Some type of analysis is used to validate the robustness of the model’s solution.
-
-### Justification
-The final results are compared to the benchmark result or threshold with some type of statistical analysis. Justification is made as to whether the final model and solution is significant enough to have adequately solved the problem.
 
 # References
 1. Sorkun, M. C., Khetan, A., & Er, S. (2019). *AqSolDB: A curated reference set of aqueous solubility and 2D descriptors for a diverse set of compounds*. Scientific Data, 6, 143. [https://doi.org/10.1038/s41597-019-0151-1](https://doi.org/10.1038/s41597-019-0151-1). Dataset: [https://doi.org/10.7910/DVN/OVHAW8](https://doi.org/10.7910/DVN/OVHAW8)
@@ -224,3 +326,7 @@ The final results are compared to the benchmark result or threshold with some ty
 4. Mayr, A., Klambauer, G., & Hochreiter, S. (2023). *Exploring QSAR Models for Activity-Cliff Prediction*. Journal of Cheminformatics, 15(1), 1–14. [https://doi.org/10.1186/s13321-023-00708-w](https://jcheminf.biomedcentral.com/articles/10.1186/s13321-023-00708-w)
 
 5. McInnes, L., Healy, J., & Melville, J. (2018). *UMAP: Uniform Manifold Approximation and Projection for Dimension Reduction*. arXiv:1802.03426. [https://arxiv.org/abs/1802.03426](https://arxiv.org/abs/1802.03426). GitHub: https://github.com/lmcinnes/umap
+
+6. Plotly Technologies Inc. (2015). *Collaborative data science with Plotly*. Plotly Technologies Inc. [https://plot.ly](https://plot.ly). GitHub: https://github.com/plotly/plotly.py
+
+7. Plotly Technologies Inc. (2017). *Dash: Analytical Web Apps for Python, R, Julia, and Jupyter*. Plotly Technologies Inc. [https://dash.plotly.com](https://dash.plotly.com). GitHub: https://github.com/plotly/dash
