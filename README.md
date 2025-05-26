@@ -71,7 +71,7 @@ Out[36]:
 </tr>
 </table>
 
-**Feature Distributions**
+**Feature Distributions using Violin Plots**
 <img src="images/feature_distributions.png" alt="sol_box_plot" width="1200"/>
 
 **Sample Rows**
@@ -100,10 +100,29 @@ Our main goal here is to use AWS **ensemble** models to help us identify areas o
 
 <figure>
   <img src="images/umap_sol.png" alt="UMAP solubility plot" width="1200"/>
-  <figcaption><em>UMAP projection of 17 dimensional feature space showing logS solubility of each compound (n=9982)</em></figcaption>
+  <figcaption><em>UMAP 2D projection of 17 dimensional feature space showing logS solubility of each compound (n=9982)</em></figcaption>
 </figure>
 
-In the image above we can see that some areas have a relatively low target variance and standard regression models (like XGBRegressor) should be able to make relatively accurate predictions in those areas. We also some some areas with higher variance that may indicate compounds on activity cliffs, noisy experimental measurements, or simply mislabeled solubility metrics.
+In the image above we can see that some areas have a relatively low target variance and standard regression models (like XGBRegressor) should be able to make relatively accurate predictions in those areas. We also some some areas with higher variance that may indicate compounds on activity cliffs, noisy experimental conditions, or simply erroneous solubility measurements.
+
+**Using Solubility Classification Colors**
+
+Although this project will strictly be using regression models, here we want to better illuminate the areas of feature space that have high variance by coloring the plot above with a "high, medium, and low" solubility values. For logS solubility those values are traditionally based on these ranges:
+
+- **High Solubility**: > -4 logS
+- **Medium Solubility:** > -5 and < -4 logS
+- **Low Solubility:** < -5 logS
+
+<figure>
+  <img src="images/umap_sol_class.png" alt="UMAP solubility plot" width="1200"/>
+  <figcaption><em>Same UMAP projection as above but colored by solubility classes to better illustrate areas of high variance</em></figcaption>
+</figure>
+
+
+<figure>
+  <img src="images/showing_zoom_in.png" alt="UMAP solubility plot" width="1200"/>
+  <figcaption><em>Zooming into an area with high variability. Compounds show solubility from every category("low", "medium", and "high")</em></figcaption>
+</figure>
 
 
 ## Algorithms and Techniques
