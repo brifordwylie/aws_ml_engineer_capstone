@@ -127,11 +127,9 @@ Although this project will strictly be using regression models, here we want to 
 
 ## Algorithms and Techniques
 
-1. **Prediction Intervals using Bootstrapping**
-   - Bootstrapping involves repeatedly sampling from the training data and fitting the model multiple times to generate a distribution of predictions. This can be used to estimate prediction intervals. This approach should be robust and doesn't make assumptions about a particular distribution. 
+1. **Prediction Intervals using Bootstrapping**: Bootstrapping involves repeatedly sampling from the training data and fitting the model multiple times to generate a distribution of predictions. This can be used to estimate prediction intervals. This approach should be robust and doesn't make assumptions about a particular distribution. 
   
-1. **Quantile Regression**
-   - A set of models with different objective functions that can provide quantile estimates for predictions, offering a broader sense of the distribution within the training data. It will help in understanding the range and variability of predictions. We'll estimate a range of quantiles that should give us a 'spread' of target values within that region of feature space.
+1. **Quantile Regression**: A set of models with different objective functions that can provide quantile estimates for predictions, offering a broader sense of the distribution within the training data. It will help in understanding the range and variability of predictions. We'll estimate a range of quantiles that should give us a 'spread' of target values within that region of feature space.
 
 1. **K-Nearest Neighbors (KNN) Model**: This model will use the distances to the nearest neighbors in feature space. Observations that have close neighbors with low variance in their target values will have higher confidence values, while those in high variance neighborhoods or sparse regions will have lower confidence.
 
@@ -365,7 +363,7 @@ The outputs from the Endpoint has the output of all 10 models. These output can 
 
 ### Quantile Regressor
 
-The full Model Script for this **quantile regressor** model is here: [quantile_regressor](https://github.com/brifordwylie/aws_ml_engineer_capstone/blob/main/model_scripts/quant_regression/quant_regression.py). Here are some of the relevant details for the creation of quantile regressor models. Specifically we use the **reg:quantileerrro** objective function, we create 5 seperate model for the following quantiles **[0.10, 0.25, 0.50, 0.75, 0.90]**
+The full Model Script for this **quantile regressor** model is here: [quantile_regressor](https://github.com/brifordwylie/aws_ml_engineer_capstone/blob/main/model_scripts/quant_regression/quant_regression.py). Here are some of the relevant details for the creation of quantile regressor models. Specifically we use the **reg:quantileerror** objective function, we create 5 seperate model for the following quantiles **[0.10, 0.25, 0.50, 0.75, 0.90]**
 
 ```
 quantiles = [0.10, 0.25, 0.50, 0.75, 0.90]
@@ -388,10 +386,10 @@ for q in quantiles:
     q_models[q_str] = model
 ```
 
-We follow a similar pattern where we save the model and then load them in during endpoint inference and predict against all the models.
+We follow a similar pattern where we save the set of models and then load them in during endpoint inference and predict against all the models.
 
 **Outputs**
-The outputs from this model include the following quantiles **[0.10, 0.25, 0.50, 0.75, 0.90]**. The output also include **IQR** Inner Quartile Range (q_75-q_25) and **IDR** which is the Inner Decile Range (the difference between q_10 and q_90), it gives you an estimate of the entire span of all the target values in that region.
+The outputs from this model include the following quantiles **[0.10, 0.25, 0.50, 0.75, 0.90]**. The output also includes **IQR** Inner Quartile Range (q\_75-q\_25) and **IDR** which is the Inner Decile Range (the difference between q\_10 and q\_90), it gives you an estimate of the entire span of all the target values in that region.
 
 ```
 [●●●]Workbench:scp_sandbox> quant_df[quant_show]
@@ -421,22 +419,32 @@ Out[67]:
 
 
   
-1. **Quantile Regression**
-   - A set of models with different objective functions that can provide quantile estimates for predictions, offering a broader sense of the distribution within the training data. It will help in understanding the range and variability of predictions. We'll estimate a range of quantiles that should give us a 'spread' of target values within that region of feature space.
+### K-Nearest Neighbors (KNN) Model
 
-1. **K-Nearest Neighbors (KNN) Model**: This model will use the distances to the nearest neighbors in the feature space. Observations that have close neighbors with low variance in their target values will have higher confidence values, while those in high variance neighborhoods or sparse regions will have lower confidence.
+This model computes distances to the nearest neighbors in the feature space. Observations that have close neighbors with low variance in their target values will have higher confidence values, while those in high variance neighborhoods or sparse regions will have lower confidence.
 
+The full Model Script for this **K-Nearest Neighbors** model is here: [knn_model](https://github.com/brifordwylie/aws_ml_engineer_capstone/blob/main/model_scripts/knn_model/knn_model.py). The model script uses the Proximity class [proximity_class](https://github.com/brifordwylie/aws_ml_engineer_capstone/blob/main/model_scripts/knn_model/proximity.py). Specifically this model involves quite a bit of 'bookkeeping' so the ProximityClass was created to manage the set of parameters, normalization, serialization, and settings associated with the having an endpoint that gives you back your nearest neighbors in feature space.
 
+**Outputs**
 
-1. **Model Training**: Will use the AWS SageMaker model training functionality to train our two data quality models.
-   - **Quantile Regression + Residuals**: Model to predict different quantiles of the target variable. This model will also compute residuals as described above.
-   - **K-Nearest Neighbors (KNN) Model**: Develop a KNN-based model to estimate confidence levels based on the density and variability of observations in the feature space.
+The outputs from this model don't actually include any predictions. You send the endpoint a set of rows, with the same features as the trained model, and the model sends you back the closest neighbors in feature space. We'll use this funcitonality as part of our confidence metrics.
 
-1. **Endpoint Deployment**: Deploy the models on AWS SageMaker, setting up serverless endpoints for predictions and confidence estimates.
-1. **Model Evaluation**: Evaluate the models using the defined metrics, comparing them against the benchmark model.
-1. **Visualization and Reporting**: Create visualizations to illustrate the distribution of predictions and confidence levels, and compile a comprehensive report documenting the findings and insights from the project.
+```
+           id neighbor_id  distance  solubility
+0      A-1006      A-1006       0.0     -3.8658
+1      A-1006      C-2080  0.296921        -4.8
+2      A-1006      B-2095   0.32178     -4.0814
+3      A-1006       F-391  0.363246       -2.73
+4      A-1006      B-2187  0.379395     -3.0832
+...       ...         ...       ...         ...
+21951    I-13       E-390  0.610007       -3.96
+21952    I-13      B-2436   0.61265      -1.969
+21953    I-13       A-758  0.614731   -2.548488
+21954    I-13      C-1923  0.615585       -3.44
+21955    I-13      E-1251   0.62037       -2.85
 
-By following this workflow, the project aims to deliver robust data quality/confidence models that enhance the interpretability and reliability of machine learning predictions in AWS.
+[21956 rows x 4 columns]
+```
 
 
 
