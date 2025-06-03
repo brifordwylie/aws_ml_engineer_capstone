@@ -3,15 +3,35 @@
 Welcome to my capstone project for the Udacity AWS Machine Learning Course <https://www.udacity.com/enrollment/nd189>.
 
 ## Project Overview
-For this project we're going to explore ways of computing confidence for regression model predictions. In particular we'd like to deploy a set of models into AWS, ensembles for bootstrapping, quantile regressors, and models that include variance/stddev measures. Our model scripts and AWS endpoints will use these models as a **supplement** to our base regression model, providing additional information like standard deviation, prediction intervals and quantile ranges.
+For this project we're going to explore ways of computing confidence for regression model predictions. In particular we'd like to deploy a set of models into **AWS**, ensembles for bootstrapping, quantile regressors, and models that include variance/stddev measures. Our model scripts and AWS endpoints will use these models as a **supplement** to our base regression model, providing additional information like standard deviation, prediction intervals and quantile ranges.
 
 ### Project Goal
 The goal for this project is to have an AWS model (or set of models) that gives us both point predictions and a confidence metric associated with each prediction.
 
 <figure>
   <img src="images/solubility_confidence.png" alt="sol_box_plot" width="1200"/>
-  <figcaption><em>Regression with Confidence: Solubility prediction and confidence metric</em></figcaption>
+  <figcaption><em>Regression with Confidence: Solubility point prediction and confidence metric</em></figcaption>
 </figure>
+
+
+
+#### Uncertainty Quantification Algorithm Tier Ranking
+<figure style="float: right; margin-left: 20px; width: 200px;">
+  <img src="images/tier_rankings.png" alt="sol_box_plot" style="width: 100%;" />
+  <figcaption><em>UQ Algorithm Tier Ranking</em></figcaption>
+</figure>
+
+Since we're going to be testing and experimented a lot of algorithms for this project, as a **fun** side goal we'll be doing a tier ranking:
+
+
+1. **Bootstrap Ensemble**
+2. **Quantile Regression**
+3. **K-Nearest Neighbors**
+4. **BayesianRidge Regressor**
+5. **GaussianProcess Regressor**
+6. **MAPIE**
+6. **NGBoost**
+
 
 ## Datasets and Inputs
 For this project, we're going to use the publicly available AqSol Database [1]. This is a curated reference set of aqueous solubility, created by the Autonomous Energy Materials Discovery [AMD] research group, consists of aqueous solubility values of 9,982 unique compounds curated from 9 different publicly available aqueous solubility datasets. AqSolDB also contains some relevant topological and physico-chemical 2D descriptors. Additionally, AqSolDB contains validated molecular representations of each of the compounds.
@@ -20,15 +40,19 @@ Data Download from the Harvard DataVerse: <https://dataverse.harvard.edu/dataset
 
 
 ## Problem Statement
-Within the domain of **drug discovery**, data used for model training often comes from bench experiments where a property like solubility is measured. As part of the data collection, there is often **noise** associated with the measurement, differences in temperature, pH, and meansurement procedures can lead to variability. Also compounds can hit activity cliffs (see [2][3][4]) where a small molecular change can lead to a significant difference in the response variable. For all of these scenarios, we'd like to provide a set of models that supplement a regression prediction with a 'confidence' metric for each observation. The confidence metrics are directly tied to varibility of the target value within feature space. So areas of high variability (stddev or large quantile spread) will have a lower confidence and areas that are 'smooth' (low variability/low spread) will have higher confidence.
+Within the domain of **drug discovery**, data used for model training often comes from bench experiments where a property like solubility is measured. As part of the data collection, there is often **noise** associated with the measurement, differences in temperature, pH, and measurement procedures can lead to variability. Also compounds can hit activity cliffs (see [2][3][4]) where a small molecular change can lead to a significant difference in the response variable. For all of these scenarios, we'd like to provide a set of models that supplement a regression prediction with a 'confidence' metric for each observation. The confidence metrics are directly tied to varibility of the target value within feature space. So areas of high variability (stddev or large quantile spread) will have a lower confidence and areas that are 'smooth' (low variability/low spread) will have higher confidence.
 
 ## Metrics
 We'd like our confidence metric to capture areas in feature space where the model is more or less confident in it's predictions. In areas of high confidence we'd expect to have smaller residuals and in areas of low confidence we'd expect to see larger residuals.
 
-For general metrics we'll use the correlation between the our metric and TBD
 
 
+Coverage @ 90% - Does your 90% interval actually contain 90% of true values? This is the gold standard for UQ.
 
+Secondary Metrics:
+
+Correlation (prediction_std/absolute residuals): 0.499 - How well uncertainty correlates with actual errors (higher = better)
+Average Interval Width - Efficiency measure (narrower intervals = more useful, if coverage is maintained)
 The metrics will include standard descriptive statistics about each of the confidence 'bands' (low, medium, and high). 
 
 - min/max
@@ -149,7 +173,9 @@ Although this project will strictly be using regression models, here we want to 
 
 5. **GaussianProcess Regressor**: This probabilistic model naturally provides uncertainty estimates by modeling the covariance structure of the data. It excels with small datasets and smooth functions, providing both mean predictions and confidence intervals. However, it assumes smoothness in the underlying function and can struggle with noisy, high-dimensional data or when the smoothness assumption is violated.
 
-6. **NGBoost**: Natural Gradient Boosting [8] extends gradient boosting to probabilistic prediction by treating distributional parameters as targets for multiparameter boosting. It provides full probability distributions for each prediction, enabling both point estimates and uncertainty quantification without assuming smoothness or homoscedasticity. This approach is particularly well-suited for complex, noisy datasets where traditional uncertainty methods may fail.
+6. **MAPIE **: Natural Gradient Boosting [8] extends gradient boosting to probabilistic prediction by treating distributional parameters as targets for multiparameter boosting. It provides full probability distributions for each prediction, enabling both point estimates and uncertainty quantification without assuming smoothness or homoscedasticity. This approach is particularly well-suited for complex, noisy datasets where traditional uncertainty methods may fail.
+
+7. **NGBoost**: Natural Gradient Boosting [8] extends gradient boosting to probabilistic prediction by treating distributional parameters as targets for multiparameter boosting. It provides full probability distributions for each prediction, enabling both point estimates and uncertainty quantification without assuming smoothness or homoscedasticity. This approach is particularly well-suited for complex, noisy datasets where traditional uncertainty methods may fail.
 
 **These models and endpoints will be implemented using AWS SageMaker, leveraging its robust infrastructure for training, deploying, and scaling machine learning models.**
 

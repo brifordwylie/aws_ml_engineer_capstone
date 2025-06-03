@@ -1,5 +1,8 @@
-# Model: Bayesian Ridge Regressor with Standard Deviation output
-from sklearn.linear_model import BayesianRidge
+# Model: Gaussian Process Regressor with Standard Deviation output
+from sklearn.gaussian_process import GaussianProcessRegressor
+from sklearn.gaussian_process.kernels import RBF, Matern, WhiteKernel, ConstantKernel
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import Pipeline
 from sklearn.model_selection import train_test_split
 
 # Template Placeholders
@@ -94,19 +97,27 @@ if __name__ == "__main__":
         print("Splitting data randomly...")
         df_train, df_val = train_test_split(df, test_size=validation_split, random_state=42)
 
+    # Kernel for Gaussian Process Regression
+    # kernel = RBF() + WhiteKernel()
+    kernel = Matern(nu=1.5) + WhiteKernel()
+
     # Create and train the Regression/Confidence model
-    # model = BayesianRidge()
-    model = BayesianRidge(
-        alpha_1=1e-6, alpha_2=1e-6,  # Noise precision
-        lambda_1=1e-6, lambda_2=1e-6,  # Weight precision
-        fit_intercept=True,
+    model = GaussianProcessRegressor(
+        kernel=kernel,
+        alpha=0.1,  # Noise level
     )
+
+    # Create a Pipeline with StandardScaler
+    model = Pipeline([
+        ("scaler", StandardScaler()),
+        ("model", model)
+    ])
 
     # Prepare features and targets for training
     X_train = df_train[features]
     X_val = df_val[features]
-    y_train = df_train[target] if target else None
-    y_val = df_val[target] if target else None
+    y_train = df_train[target]
+    y_val = df_val[target]
 
     # Train the model using the training data
     model.fit(X_train, y_train)
