@@ -1,15 +1,7 @@
-# Template Placeholders
-TEMPLATE_PARAMS = {
-    "model_type": "quantile_regressor",
-    "target_column": "solubility",
-    "feature_list": ['molwt', 'mollogp', 'molmr', 'heavyatomcount', 'numhacceptors', 'numhdonors', 'numheteroatoms', 'numrotatablebonds', 'numvalenceelectrons', 'numaromaticrings', 'numsaturatedrings', 'numaliphaticrings', 'ringcount', 'tpsa', 'labuteasa', 'balabanj', 'bertzct'],
-    "model_metrics_s3_path": "s3://sandbox-sageworks-artifacts/models/training/aqsol-quantiles",
-    "train_all_data": False
-}
-
 # Imports for XGB Model
 import xgboost as xgb
 import awswrangler as wr
+from sklearn.model_selection import train_test_split
 
 # Model Performance Scores
 from sklearn.metrics import (
@@ -23,6 +15,17 @@ import json
 import argparse
 import os
 import pandas as pd
+
+# Template Placeholders
+TEMPLATE_PARAMS = {
+    "model_type": "quantile_regressor",
+    "target_column": "solubility",
+    "features": ['molwt', 'mollogp', 'molmr', 'heavyatomcount', 'numhacceptors', 'numhdonors', 'numheteroatoms', 'numrotatablebonds',
+                 'numvalenceelectrons', 'numaromaticrings', 'numsaturatedrings', 'numaliphaticrings', 'ringcount', 'tpsa', 'labuteasa',
+                 'balabanj', 'bertzct'],
+    "model_metrics_s3_path": "s3://sandbox-sageworks-artifacts/models/aqsol-quantiles/training",
+    "train_all_data": False
+}
 
 
 # Function to check if dataframe is empty
@@ -38,6 +41,7 @@ def check_dataframe(df: pd.DataFrame, df_name: str) -> None:
         msg = f"*** The training data {df_name} has 0 rows! ***STOPPING***"
         print(msg)
         raise ValueError(msg)
+
 
 def match_features_case_insensitive(df: pd.DataFrame, model_features: list) -> pd.DataFrame:
     """
@@ -81,9 +85,11 @@ if __name__ == "__main__":
 
     # Harness Template Parameters
     target = TEMPLATE_PARAMS["target_column"]
-    feature_list = TEMPLATE_PARAMS["feature_list"]
+    features = TEMPLATE_PARAMS["features"]
     model_metrics_s3_path = TEMPLATE_PARAMS["model_metrics_s3_path"]
-    quantiles = [0.10, 0.25, 0.50, 0.75, 0.90]
+    train_all_data = TEMPLATE_PARAMS["train_all_data"]
+    validation_split = 0.2
+    quantiles = [0.025, 0.25, 0.50, 0.75, 0.975]
     q_models = {}
 
     # Script arguments for input/output directories
@@ -109,14 +115,32 @@ if __name__ == "__main__":
     # Check if the dataframe is empty
     check_dataframe(df, "training_df")
 
+    # Training data split logic
+    if train_all_data:
+        # Use all data for both training and validation
+        print("Training on all data...")
+        df_train = df.copy()
+        df_val = df.copy()
+    elif "training" in df.columns:
+        # Split data based on a 'training' column if it exists
+        print("Splitting data based on 'training' column...")
+        df_train = df[df["training"]].copy()
+        df_val = df[~df["training"]].copy()
+    else:
+        # Perform a random split if no 'training' column is found
+        print("Splitting data randomly...")
+        df_train, df_val = train_test_split(df, test_size=validation_split, random_state=42)
+
     # Features/Target output
     print(f"Target: {target}")
-    print(f"Features: {str(feature_list)}")
+    print(f"Features: {str(features)}")
     print(f"Data Shape: {df.shape}")
 
-    # Grab our Features and Target with traditional X, y handles
-    y = df[target]
-    X = df[feature_list]
+    # Prepare features and targets for training
+    X_train = df_train[features]
+    X_val = df_val[features]
+    y_train = df_train[target]
+    y_val = df_val[target]
 
     # Train models for each of the quantiles
     for q in quantiles:
@@ -125,42 +149,30 @@ if __name__ == "__main__":
             "quantile_alpha": q,
         }
         model = xgb.XGBRegressor(**params)
-        model.fit(X, y)
+        model.fit(X_train, y_train)
 
         # Convert quantile to string
-        q_str = f"q_{int(q * 100):02}"
+        q_str = f"q_{int(q * 100)}" if (q * 100) == int(q * 100) else f"q_{int(q * 1000):03d}"
 
         # Store the model
         q_models[q_str] = model
 
-    # Train a model for RMSE predictions
-    params = {"objective": "reg:squarederror"}
-    rmse_model = xgb.XGBRegressor(**params)
-    rmse_model.fit(X, y)
-
     # Run predictions for each quantile
-    quantile_predictions = {q: model.predict(X) for q, model in q_models.items()}
+    quantile_predictions = {q: model.predict(X_val) for q, model in q_models.items()}
 
-    # Create a copy of the provided DataFrame and add the new columns
-    result_df = df[[target]].copy()
+    # Create a copy of the validation DataFrame and add the new columns
+    result_df = df_val[[target]].copy()
 
     # Add the quantile predictions to the DataFrame
     for name, preds in quantile_predictions.items():
         result_df[name] = preds
 
-    # Add the Inner Quartile Range (IQR) to the DataFrame
-    result_df["iqr"] = result_df["q_75"] - result_df["q_25"]
+    # Add the median as the main prediction
+    result_df["prediction"] = result_df["q_50"]
 
-    # Add the Inter Decile Range (IDR) range between the 10th and 90th percentiles
-    result_df["idr"] = result_df["q_90"] - result_df["q_10"]
-
-    # Add the RMSE predictions to the DataFrame
-    result_df["prediction"] = rmse_model.predict(X)
-
-    # Now compute residuals on the rmse prediction
+    # Now compute residuals on the prediction
     result_df["residual"] = result_df[target] - result_df["prediction"]
     result_df["residual_abs"] = result_df["residual"].abs()
-
 
     # Save the results dataframe to S3
     wr.s3.to_csv(
@@ -184,14 +196,9 @@ if __name__ == "__main__":
         print(f"Saving model:  {model_path}")
         model.save_model(model_path)
 
-    # Save the RMSE model
-    model_path = os.path.join(args.model_dir, "rmse.json")
-    print(f"Saving model:  {model_path}")
-    rmse_model.save_model(model_path)
-
     # Also save the features (this will validate input during predictions)
     with open(os.path.join(args.model_dir, "feature_columns.json"), "w") as fp:
-        json.dump(feature_list, fp)
+        json.dump(features, fp)
 
 
 def model_fn(model_dir) -> dict:
@@ -218,12 +225,6 @@ def model_fn(model_dir) -> dict:
             q_name = os.path.splitext(file)[0]
             models[q_name] = model
 
-    # Now load the RMSE model
-    model_path = os.path.join(model_dir, "rmse.json")
-    print(f"Loading model: {model_path}")
-    models["rsme"] = xgb.XGBRegressor()
-    models["rsme"].load_model(model_path)
-
     # Return all the models
     return models
 
@@ -232,7 +233,7 @@ def input_fn(input_data, content_type):
     """Parse input data and return a DataFrame."""
     if not input_data:
         raise ValueError("Empty input data is not supported!")
-    
+
     # Decode bytes to string if necessary
     if isinstance(input_data, bytes):
         input_data = input_data.decode("utf-8")
@@ -280,16 +281,13 @@ def predict_fn(df, models) -> pd.DataFrame:
 
     # Predict the features against all the models
     for name, model in models.items():
-        if name == "rsme":
-            df["prediction"] = model.predict(matched_df[model_features])
-        else:
-            df[name] = model.predict(matched_df[model_features])
+        df[name] = model.predict(matched_df[model_features])
 
-    # Add the Inner Quartile Range (IQR) to the DataFrame
-    df["iqr"] = df["q_75"] - df["q_25"]
+    # Use the median prediction as the main prediction
+    df["prediction"] = df["q_50"]
 
-    # Add the Inter Decile Range (IDR) range between the 10th and 90th percentiles
-    df["idr"] = df["q_90"] - df["q_10"]
+    # Estimate the standard deviation of the predictions using the interquartile range
+    df["prediction_std"] = (df["q_75"] - df["q_25"]) / 1.35
 
     # Reorganize the columns so they are in alphabetical order
     df = df.reindex(sorted(df.columns), axis=1)

@@ -3,7 +3,7 @@
 Welcome to my capstone project for the Udacity AWS Machine Learning Course <https://www.udacity.com/enrollment/nd189>.
 
 ## Project Overview
-For this project we're going to explore ways of computing confidence for regression model predictions. In particular we'd like to deploy a set of models into **AWS**, ensembles for bootstrapping, quantile regressors, and models that include variance/stddev measures. Our model scripts and AWS endpoints will use these models as a **supplement** to our base regression model, providing additional information like standard deviation, prediction intervals and quantile ranges.
+For this project we're going to explore ways of computing confidence for regression model predictions. In particular we'd like to deploy a set of models into **AWS**, ensembles for bootstrapping, quantile regressors, and Uncertainly Quantification (UQ) models that include stddev or prediction intervals. Our model scripts and AWS endpoints will use these models to provide both a point prediction and additional information like standard deviation or prediction intervals.
 
 ### Project Goal
 The goal for this project is to have an AWS model (or set of models) that gives us both point predictions and a confidence metric associated with each prediction.
@@ -23,14 +23,13 @@ The goal for this project is to have an AWS model (or set of models) that gives 
 
 Since we're going to be testing and experimented a lot of algorithms for this project, as a **fun** side goal we'll be doing a tier ranking:
 
-
+1. **BayesianRidge Regressor**
+1. **GaussianProcess Regressor**
+1. **MAPIE**
+1. **NGBoost**
 1. **Bootstrap Ensemble**
-2. **Quantile Regression**
-3. **K-Nearest Neighbors**
-4. **BayesianRidge Regressor**
-5. **GaussianProcess Regressor**
-6. **MAPIE**
-6. **NGBoost**
+1. **Quantile Regression**
+1. **K-Nearest Neighbors**
 
 
 ## Datasets and Inputs
@@ -45,28 +44,16 @@ Within the domain of **drug discovery**, data used for model training often come
 ## Metrics
 We'd like our confidence metric to capture areas in feature space where the model is more or less confident in it's predictions. In areas of high confidence we'd expect to have smaller residuals and in areas of low confidence we'd expect to see larger residuals.
 
+We're going to measure our Models with these metrics:
 
+**UQ Model Evaluation Metrics**
 
-Coverage @ 90% - Does your 90% interval actually contain 90% of true values? This is the gold standard for UQ.
+- **Coverage @ 95%**: Reliability: fraction of true values in 95% intervals (target: 0.95)
+- **Coverage @ 50%**: Precision: fraction of true values in 50% intervals (target: 0.50)
+- **Average 95% Interval Width**: Efficiency: narrower intervals preferred if coverage maintained
+- **Average 50% Interval Width**: Efficiency: narrower intervals preferred if coverage maintained
+- **Uncertainty-Error Correlation**: Quality: how well uncertainty predicts actual errors
 
-Secondary Metrics:
-
-Correlation (prediction_std/absolute residuals): 0.499 - How well uncertainty correlates with actual errors (higher = better)
-Average Interval Width - Efficiency measure (narrower intervals = more useful, if coverage is maintained)
-The metrics will include standard descriptive statistics about each of the confidence 'bands' (low, medium, and high). 
-
-- min/max
-- mean
-- stddev
-- Q1, Q2, Q3, IQR
-
-The delination of the confidence bands (low, medium, and high) will be as follows:
-
-- **Low** (0.0 to 0.33)
-- **Medium** (0.33 to 0.66)
-- **High** (0.66 to 1.0)
-
-The calculation of the confidence score will be domain specific, meaning that for our particular dataset and target values will look at the ensemble model outputs and determine a heuristic for a confidence score that ranges from 0.0 to 1.0.
 
 # Analysis
 
@@ -163,19 +150,20 @@ Although this project will strictly be using regression models, here we want to 
 
 ## Algorithms and Techniques
 
-1. **Prediction Intervals using Bootstrapping**: Bootstrapping involves repeatedly sampling from the training data and fitting the model multiple times to generate a distribution of predictions. This can be used to estimate prediction intervals. This approach is robust and doesn't make assumptions about a particular distribution.
+1. **Bayesian Ridge Regressor**: This model provides point predictions with standard deviations that could serve as confidence metrics. However, since it assumes homoscedastic noise, this may not provide the row-level confidence differentiation needed for individual inference results.
 
-2. **Quantile Regression**: A set of models with different objective functions that can provide quantile estimates for predictions, offering a broader sense of the distribution within the training data. It helps in understanding the range and variability of predictions by estimating a range of quantiles that provide a 'spread' of target values within that region of feature space.
+2. **Gaussian Process Regressor**: This probabilistic model naturally provides uncertainty estimates by modeling the covariance structure of the data. It excels with small datasets and smooth functions, providing both mean predictions and confidence intervals. However, it assumes smoothness in the underlying function and can struggle with noisy, high-dimensional data or when the smoothness assumption is violated.
 
-3. **K-Nearest Neighbors (KNN) Model**: This model uses the distances to the nearest neighbors in feature space. Observations that have close neighbors with low variance in their target values will have higher confidence values, while those in high variance neighborhoods or sparse regions will have lower confidence.
+3. **MAPIE (Model Agnostic Prediction Interval Estimator)**: MAPIE provides conformal prediction intervals that are distribution-free and come with theoretical coverage guarantees. It can wrap any scikit-learn compatible model to generate prediction intervals through conformal inference methods like split conformal prediction or cross-conformal prediction. The key advantage is that it makes minimal assumptions about the underlying data distribution while providing statistically valid coverage rates.
 
-4. **BayesianRidge Regressor**: This model provides point predictions with standard deviations that could serve as confidence metrics. However, since it assumes homoscedastic noise, this may not provide the row-level confidence differentiation needed for individual inference results.
+4. **NGBoost**: Natural Gradient Boosting [8] extends gradient boosting to probabilistic prediction by treating distributional parameters as targets for multiparameter boosting. It provides full probability distributions for each prediction, enabling both point estimates and uncertainty quantification without assuming smoothness or homoscedasticity. This approach is particularly well-suited for complex, noisy datasets where traditional uncertainty methods may fail.
 
-5. **GaussianProcess Regressor**: This probabilistic model naturally provides uncertainty estimates by modeling the covariance structure of the data. It excels with small datasets and smooth functions, providing both mean predictions and confidence intervals. However, it assumes smoothness in the underlying function and can struggle with noisy, high-dimensional data or when the smoothness assumption is violated.
+5. **Bootstrap Ensemble**: Bootstrapping involves repeatedly sampling from the training data and fitting the model multiple times to generate a distribution of predictions. This can be used to estimate prediction intervals. This approach is robust and doesn't make assumptions about a particular distribution.
 
-6. **MAPIE **: Natural Gradient Boosting [8] extends gradient boosting to probabilistic prediction by treating distributional parameters as targets for multiparameter boosting. It provides full probability distributions for each prediction, enabling both point estimates and uncertainty quantification without assuming smoothness or homoscedasticity. This approach is particularly well-suited for complex, noisy datasets where traditional uncertainty methods may fail.
+6. **Quantile Regression**: A set of models with different objective functions that can provide quantile estimates for predictions, offering a broader sense of the distribution within the training data. It helps in understanding the range and variability of predictions by estimating a range of quantiles that provide a 'spread' of target values within that region of feature space.
 
-7. **NGBoost**: Natural Gradient Boosting [8] extends gradient boosting to probabilistic prediction by treating distributional parameters as targets for multiparameter boosting. It provides full probability distributions for each prediction, enabling both point estimates and uncertainty quantification without assuming smoothness or homoscedasticity. This approach is particularly well-suited for complex, noisy datasets where traditional uncertainty methods may fail.
+7. **K-Nearest Neighbors (KNN) Model**: This model uses the distances to the nearest neighbors in feature space. Observations that have close neighbors with low variance in their target values will have higher confidence values, while those in high variance neighborhoods or sparse regions will have lower confidence.
+
 
 **These models and endpoints will be implemented using AWS SageMaker, leveraging its robust infrastructure for training, deploying, and scaling machine learning models.**
 
@@ -589,51 +577,6 @@ The outputs from this model don't actually include any predictions. You send the
 ```
 
 # Results
-## Bayesian Ridge
-As mentioned above the Bayesian Ridge algorithm assumes homoscedastic noise, this may not provide the row-level confidence differentiation needed for individual inference results. We can see that our correlation isn't great and looking at the scatter plot looks even worse.
-
-```
-Bayesian Ridge: Correlation between prediction_std and absolute residuals: 0.281
-```
-
-<figure>
-  <img src="images/results_bayesian_ridge_1.png" alt="sol_box_plot" width="1200"/>
-  <figcaption><em>Bayesian Ridge: Correlation between prediction_std and abs(residuals)</em></figcaption>
-</figure>
-
-```
-Correlation between prediction_std and absolute residuals: 0.281
-```
-
-GaussianProcess
-
-```
-Correlation between prediction_std and absolute residuals: -0.088
-```
-
-Quantile Regressor
-
-```
-Correlation between Quantile Regression (IDR) and absolute residuals: 0.269
-```
-
-NGBoost
-
-```
-     MAE   RMSE     R2     MAPE  MedAE  NumRows
-0  0.845  1.178  0.754  144.055  0.631     1996
-Correlation between prediction_std and absolute residuals: 0.487
-
-After Hyperparameter adjust ments
-
-Performance Metrics for aqsol-ngboost-reg on aqsol-ngboost-reg
-     MAE   RMSE     R2     MAPE  MedAE  NumRows
-0  0.809  1.126  0.775  133.872  0.589     1996
-
-Correlation between prediction_std and absolute residuals: 0.551
-
-
-```
 
 ## AWS Artifacts
 Here's some screen shots of the AWS Artifacts created as part of this project
