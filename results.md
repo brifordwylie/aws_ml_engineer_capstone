@@ -330,7 +330,7 @@ We used AWS Sagemaker to develop, train, deploy, and compare a large set of Unce
 All the models had various strengths and weaknesses but given our use case and the performance metrics here's a ranked list for their effectiveness on the AQSol public data.
 
 - [NGBoost](https://github.com/brifordwylie/aws_ml_engineer_capstone/blob/main/model_scripts/ngboost) (Best Overall)
-- [MAPIE](https://github.com/brifordwylie/aws_ml_engineer_capstone/blob/main/model_scripts/mapie) (Best Coverage)
+- [MAPIE](https://github.com/brifordwylie/aws_ml_engineer_capstone/blob/main/model_scripts/mapie_xgb) (Best Coverage)
 - [Quantile Regressor](https://github.com/brifordwylie/aws_ml_engineer_capstone/blob/main/model_scripts/quant_regression/quant_regression.py).
 - [Bootstrap Ensemble](https://github.com/brifordwylie/aws_ml_engineer_capstone/blob/main/model_scripts/ensemble_xgb/ensemble_with_calibration.py)
 - [Gaussian Process](https://github.com/brifordwylie/aws_ml_engineer_capstone/blob/main/model_scripts/gaussian_process/gaussian_process.py)
