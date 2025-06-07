@@ -3,25 +3,20 @@
 Welcome to my capstone project for the Udacity AWS Machine Learning Course <https://www.udacity.com/enrollment/nd189>.
 
 ## Project Overview
-For this project we're going to explore ways of computing confidence for regression model predictions. In particular we'd like to deploy a set of models into **AWS**, ensembles for bootstrapping, quantile regressors, and Uncertainly Quantification (UQ) models that include stddev or prediction intervals. Our model scripts and AWS endpoints will use these models to provide both a point prediction and additional information like standard deviation or prediction intervals.
+For this project we're going to explore ways of computing uncertainty for regression model predictions. In particular we'd like to deploy a set of models into **AWS**, ensembles for bootstrapping, quantile regressors, and Uncertainly Quantification (UQ) models that include stddev or prediction intervals. Our model scripts and AWS endpoints will use these models to provide both a point prediction and additional information like standard deviation and prediction intervals.
 
 ### Project Goal
-The goal for this project is to have an AWS model (or set of models) that gives us both point predictions and a confidence metric associated with each prediction.
+The goal for this project is to have an AWS model (or set of models) that gives us both point predictions and a set of uncertainly quantification metric associated with each prediction.
 
 <figure>
-  <img src="images/solubility_confidence.png" alt="sol_box_plot" width="1200"/>
-  <figcaption><em>Regression with Confidence: Solubility point prediction and confidence metric</em></figcaption>
+  <img src="images/ngboost_uq.png" alt="sol_box_plot" width="1200"/>
+  <figcaption><em>Regression with Uncertainly Quantification: Solubility point prediction and uncertainly metrics</em></figcaption>
 </figure>
 
 
 
-#### Uncertainty Quantification Algorithm Tier Ranking
-<figure style="float: right; margin-left: 20px; width: 200px;">
-  <img src="images/tier_rankings.png" alt="sol_box_plot" style="width: 100%;" />
-  <figcaption><em>UQ Algorithm Tier Ranking</em></figcaption>
-</figure>
-
-Since we're going to be testing and experimented a lot of algorithms for this project, as a **fun** side goal we'll be doing a tier ranking:
+#### Uncertainty Quantification Algorithms Tested
+Since we're going to be testing and experimented a lot of algorithms for this project, at the end we'll capture results and rank the models based on their performance for our use case.
 
 1. **BayesianRidge Regressor**
 1. **GaussianProcess Regressor**
@@ -29,7 +24,6 @@ Since we're going to be testing and experimented a lot of algorithms for this pr
 1. **NGBoost**
 1. **Bootstrap Ensemble**
 1. **Quantile Regression**
-1. **K-Nearest Neighbors**
 
 
 ## Datasets and Inputs
@@ -161,9 +155,6 @@ Although this project will strictly be using regression models, here we want to 
 5. **Bootstrap Ensemble**: Bootstrapping involves repeatedly sampling from the training data and fitting the model multiple times to generate a distribution of predictions. This can be used to estimate prediction intervals. This approach is robust and doesn't make assumptions about a particular distribution.
 
 6. **Quantile Regression**: A set of models with different objective functions that can provide quantile estimates for predictions, offering a broader sense of the distribution within the training data. It helps in understanding the range and variability of predictions by estimating a range of quantiles that provide a 'spread' of target values within that region of feature space.
-
-7. **K-Nearest Neighbors (KNN) Model**: This model uses the distances to the nearest neighbors in feature space. Observations that have close neighbors with low variance in their target values will have higher confidence values, while those in high variance neighborhoods or sparse regions will have lower confidence.
-
 
 **These models and endpoints will be implemented using AWS SageMaker, leveraging its robust infrastructure for training, deploying, and scaling machine learning models.**
 
@@ -327,60 +318,82 @@ def predict_fn(df, models) -> pd.DataFrame:
 
 
 
-### Prediction Intervals using Bootstrapping
+### Bootstrap Ensemble
 
-The full Model Script for the **ensemble** model is here: [ensemble_bootstrap](https://github.com/brifordwylie/aws_ml_engineer_capstone/blob/main/model_scripts/ensemble_xgb/ensemble_xgb.py). The model script follows many of the general entry points above. Here are some of the relevant details for the creation of 10 'bootstrapped' models. The challenge here was obviously training, saving, loading, and predicting against 10 different models. 
+The full Model Script for the **ensemble** model is here: [ensemble_bootstrap](https://github.com/brifordwylie/aws_ml_engineer_capstone/blob/main/model_scripts/ensemble_xgb/ensemble_with_calibration.py). The model script follows many of the general entry points above but was by far the most complicated model script. We'll capture a few snippets of interest here but the full model script [here] has a lot of details around both training and inference predictions.
 
 **Training**
 
 ```
-# Train 10 models with random 80/20 splits of the data
-for model_id in range(10):
+# Train 100 models with random 10% bootstrap splits of the data
+num_models = 100
+for model_id in range(num_models):
     # Model Name
     model_name = f"m_{model_id:02}"
 
-    # Randomly split the data into train and test sets
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
+    # Bootstrap sample (10% with replacement)
+    sample_size = int(0.1 * len(X))
+    bootstrap_indices = np.random.choice(len(X), size=sample_size, replace=True)
+    X_train, y_train = X.iloc[bootstrap_indices], y.iloc[bootstrap_indices]
     print(f"Training Model {model_name} with {len(X_train)} rows")
-    params = {"objective": "reg:squarederror"}
-    model = xgb.XGBRegressor(**params)
+    model = xgb.XGBRegressor(reg_alpha=0.5, reg_lambda=1.0)
     model.fit(X_train, y_train)
 
     # Store the model
     models[model_name] = model
 ```
 
-**Inference/Loading Models**
+**Calibration of Uncertainties**
 
 ```
-# Load ALL the models from the model directory
-models = {}
-for file in os.listdir(model_dir):
-    if file.startswith("m_") and file.endswith(".json"):  # The Quantile models
-        # Load the model
-        model_path = os.path.join(model_dir, file)
-        print(f"Loading model: {model_path}")
-        model = xgb.XGBRegressor()
-        model.load_model(model_path)
+# Use 5-fold CV to get residuals and uncalibrated uncertainties
+kf = KFold(n_splits=5, shuffle=True, random_state=42)
+cv_residuals = []
+cv_uncertainties = []
 
-        # Store the model
-        m_name = os.path.splitext(file)[0]
-        models[m_name] = model
-```
+for fold_idx, (train_idx, val_idx) in enumerate(kf.split(X)):
+    print(f"Processing calibration fold {fold_idx + 1}/5...")
+    X_cv_train = X.iloc[train_idx].reset_index(drop=True)
+    X_cv_val = X.iloc[val_idx].reset_index(drop=True)
+    y_cv_train = y.iloc[train_idx].reset_index(drop=True)
+    y_cv_val = y.iloc[val_idx].reset_index(drop=True)
 
-**Inference/Prediction**
+    # Train ensemble on CV training data
+    cv_models = {}
+    for model_id in range(num_models):
+        sample_size = int(0.1 * len(X_cv_train))
+        bootstrap_indices = np.random.choice(len(X_cv_train), size=sample_size, replace=True)
+        X_boot, y_boot = X_cv_train.iloc[bootstrap_indices], y_cv_train.iloc[bootstrap_indices]
+        model = xgb.XGBRegressor(reg_alpha=0.5, reg_lambda=1.0)
+        model.fit(X_boot, y_boot)
+        cv_models[f"m_{model_id:02}"] = model
 
-Since we loaded the model (above) into a dictionary of models it made the predictions fairly straight forward.
+    # Get predictions on validation set
+    cv_preds = pd.DataFrame({name: model.predict(X_cv_val) for name, model in cv_models.items()})
+    cv_mean = cv_preds.mean(axis=1)
+    cv_std = cv_preds.std(axis=1)
 
-```
-# Predict the features against all the models
-for name, model in models.items():
-    df[name] = model.predict(matched_df[model_features])
+    # Store residuals and uncertainties
+    fold_residuals = (y_cv_val - cv_mean).values
+    fold_uncertainties = cv_std.values
+
+    print(f"Fold {fold_idx + 1}: {len(fold_residuals)} residuals, {len(fold_uncertainties)} uncertainties")
+
+    cv_residuals.extend(fold_residuals.tolist())
+    cv_uncertainties.extend(fold_uncertainties.tolist())
+
+    # Add after converting to numpy arrays:
+    print(f"Total: {len(cv_residuals)} residuals, {len(cv_uncertainties)} uncertainties")
+
+# Convert to numpy arrays
+cv_residuals = np.array(cv_residuals)
+cv_uncertainties = np.array(cv_uncertainties)
+
 ```
 
 **Outputs**
 
-The outputs from the Endpoint has the output of all 10 models. These output can be used to compute a prediction interval for each prediction.
+The outputs from the Endpoint has the output of all 100 models. These output can be used to compute a prediction interval for each prediction. (Note: We're just showint the first 10 here...)
 
 ```
         id      m_00      m_01      m_02      m_03      m_04      m_05      m_06      m_07      m_08      m_09  solubility  residuals
@@ -550,31 +563,6 @@ Out[20]:
 ```
 
 
-  
-### K-Nearest Neighbors (KNN) Model
-
-This model computes distances to the nearest neighbors in the feature space. The full Model Script for this **K-Nearest Neighbors** model is here: [knn_model](https://github.com/brifordwylie/aws_ml_engineer_capstone/blob/main/model_scripts/knn_model/knn_model.py). The model script uses the Proximity class [proximity_class](https://github.com/brifordwylie/aws_ml_engineer_capstone/blob/main/model_scripts/knn_model/proximity.py). Specifically this model involves quite a bit of 'bookkeeping' so the ProximityClass was created to manage the set of parameters, normalization, serialization, and settings associated with the having an endpoint that gives you back your nearest neighbors in feature space.
-
-**Outputs**
-
-The outputs from this model don't actually include any predictions. You send the endpoint a set of rows, with the same features as the trained model, and the model sends you back the closest neighbors in feature space. We'll use this funcitonality as part of our confidence metrics.
-
-```
-           id neighbor_id  distance  solubility
-0      A-1006      A-1006       0.0     -3.8658
-1      A-1006      C-2080  0.296921        -4.8
-2      A-1006      B-2095   0.32178     -4.0814
-3      A-1006       F-391  0.363246       -2.73
-4      A-1006      B-2187  0.379395     -3.0832
-...       ...         ...       ...         ...
-21951    I-13       E-390  0.610007       -3.96
-21952    I-13      B-2436   0.61265      -1.969
-21953    I-13       A-758  0.614731   -2.548488
-21954    I-13      C-1923  0.615585       -3.44
-21955    I-13      E-1251   0.62037       -2.85
-
-[21956 rows x 4 columns]
-```
 
 # Results
 

@@ -238,6 +238,8 @@ Samples: 1996
 ## Quantile Regressor
 The set of Quantile Regressor models `[q_025, q_25, q_50, q_75, q_975]` have similar prediction interval widths as the NGBoost model but don't have as much coverage. Looking at the plot we can see that the interval widths 'flair out' at the tails which is a known issue, also the correlation between prediction_std and abs(residual) is weaker. 
 
+[Quantile Regressor](https://github.com/brifordwylie/aws_ml_engineer_capstone/blob/main/model_scripts/quant_regression/quant_regression.py).
+
 ```
 === Quantile Regressor UQ Evaluation ===
 Coverage @ 95%: 0.901 (target: 0.950)
@@ -259,6 +261,7 @@ Samples: 1996
 My expectation was that the bootstrap ensemble models (50 models) would be one of the top performers. The results show great results for correlation and interval widths but terrible coverage metrics. The poor performance in coverage makes the model almost useless, so I put in effort on additional functionality around adding calibration metrics and tuning the number of models and sample rates.
 
 The following metrics and plots, show the progresssion.
+
 - First Model Script: [ensemble_bootstrap](https://github.com/brifordwylie/aws_ml_engineer_capstone/blob/main/model_scripts/ensemble_xgb/ensemble_xgb.py).
 - Final Model Script: [[ensemble_with_calibration](https://github.com/brifordwylie/aws_ml_engineer_capstone/blob/main/model_scripts/ensemble_xgb/ensemble_with_calibration.py).
 
@@ -320,3 +323,15 @@ Samples: 1996
 
 ### Bootstrap Ensemble Coverage Limitation
 While our calibrated bootstrap ensemble significantly improved uncertainty quantification, we basically hit a wall around 80% coverage for 95% confidence intervals. Bootstrap methods are known to struggle with coverage on skewed data, the core problem is that the bootstrap ensemble tend to underestimate extreme observations and don't give an accurate estimate of uncertainty.
+
+## Wrap-Up
+We used AWS Sagemaker to develop, train, deploy, and compare a large set of Uncertainly Quantification Models. The models represented a broad range of approaches and required additional Python libraries (Scikit-Learn, NGBoost, MAPIE, XGBoost). [Model Scripts](https://github.com/brifordwylie/aws_ml_engineer_capstone/blob/main/model_scripts)
+
+All the models had various strengths and weaknesses but given our use case and the performance metrics here's a ranked list for their effectiveness on the AQSol public data.
+
+- [NGBoost](https://github.com/brifordwylie/aws_ml_engineer_capstone/blob/main/model_scripts/ngboost) (Best Overall)
+- [MAPIE](https://github.com/brifordwylie/aws_ml_engineer_capstone/blob/main/model_scripts/mapie) (Best Coverage)
+- [Quantile Regressor](https://github.com/brifordwylie/aws_ml_engineer_capstone/blob/main/model_scripts/quant_regression/quant_regression.py).
+- [Bootstrap Ensemble](https://github.com/brifordwylie/aws_ml_engineer_capstone/blob/main/model_scripts/ensemble_xgb/ensemble_with_calibration.py)
+- [Gaussian Process](https://github.com/brifordwylie/aws_ml_engineer_capstone/blob/main/model_scripts/gaussian_process/gaussian_process.py)
+- [Bayesian Rdige](https://github.com/brifordwylie/aws_ml_engineer_capstone/blob/main/model_scripts/bayesian_ridge/bayesian_ridge.py)

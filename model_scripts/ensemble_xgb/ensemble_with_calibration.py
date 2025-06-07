@@ -104,13 +104,13 @@ if __name__ == "__main__":
     y = df[target]
     X = df[features]
 
-    # Train 100 models with random 30% bootstrap splits of the data
+    # Train 100 models with random 10% bootstrap splits of the data
     num_models = 100
     for model_id in range(num_models):
         # Model Name
         model_name = f"m_{model_id:02}"
 
-        # Bootstrap sample (20% with replacement)
+        # Bootstrap sample (10% with replacement)
         sample_size = int(0.1 * len(X))
         bootstrap_indices = np.random.choice(len(X), size=sample_size, replace=True)
         X_train, y_train = X.iloc[bootstrap_indices], y.iloc[bootstrap_indices]
@@ -166,7 +166,6 @@ if __name__ == "__main__":
     # Convert to numpy arrays
     cv_residuals = np.array(cv_residuals)
     cv_uncertainties = np.array(cv_uncertainties)
-
 
     # Optimize calibration parameters: σ_cal = a * σ_uc + b
     def neg_log_likelihood(params):
