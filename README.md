@@ -829,7 +829,7 @@ My expectation was that the bootstrap ensemble models (50 models) would be one o
 The following metrics and plots, show the progresssion.
 
 - First Model Script: [ensemble_bootstrap](https://github.com/brifordwylie/aws_ml_engineer_capstone/blob/main/model_scripts/ensemble_xgb/ensemble_xgb.py).
-- Final Model Script: [[ensemble_with_calibration](https://github.com/brifordwylie/aws_ml_engineer_capstone/blob/main/model_scripts/ensemble_xgb/ensemble_with_calibration.py).
+- Final Model Script: [ensemble_with_calibration](https://github.com/brifordwylie/aws_ml_engineer_capstone/blob/main/model_scripts/ensemble_xgb/ensemble_with_calibration.py).
 
 ```
 === Bootstrap Ensemble UQ Evaluation ===
@@ -890,18 +890,32 @@ Samples: 1996
 ### Bootstrap Ensemble Coverage Limitation
 While our calibrated bootstrap ensemble significantly improved uncertainty quantification, we basically hit a wall around 80% coverage for 95% confidence intervals. Bootstrap methods are known to struggle with coverage on skewed data, the core problem is that the bootstrap ensemble tend to underestimate extreme observations and don't give an accurate estimate of uncertainty.
 
-## Wrap-Up
-We used AWS Sagemaker to develop, train, deploy, and compare a large set of Uncertainly Quantification Models. The models represented a broad range of approaches and required additional Python libraries (Scikit-Learn, NGBoost, MAPIE, XGBoost). [Model Scripts](https://github.com/brifordwylie/aws_ml_engineer_capstone/blob/main/model_scripts)
-
+## Justification
 All the models had various strengths and weaknesses but given our use case and the performance metrics here's a ranked list for their effectiveness on the AQSol public data.
 
 - [NGBoost](https://github.com/brifordwylie/aws_ml_engineer_capstone/blob/main/model_scripts/ngboost) (Best Overall)
 - [MAPIE](https://github.com/brifordwylie/aws_ml_engineer_capstone/blob/main/model_scripts/mapie_xgb) (Best Coverage)
 - [Quantile Regressor](https://github.com/brifordwylie/aws_ml_engineer_capstone/blob/main/model_scripts/quant_regression/quant_regression.py).
-- [Bootstrap Ensemble](https://github.com/brifordwylie/aws_ml_engineer_capstone/blob/main/model_scripts/ensemble_xgb/ensemble_with_calibration.py)
+- [Bootstrap Ensemble](https://github.com/brifordwylie/aws_ml_engineer_capstone/blob/main/model_scripts/bootstrap/ensemble_with_calibration.py)
 - [Gaussian Process](https://github.com/brifordwylie/aws_ml_engineer_capstone/blob/main/model_scripts/gaussian_process/gaussian_process.py)
 - [Bayesian Rdige](https://github.com/brifordwylie/aws_ml_engineer_capstone/blob/main/model_scripts/bayesian_ridge/bayesian_ridge.py)
 
+NGBoost was selected as the best uncertainty quantification model based on its balanced performance across key statistical metrics. While no single model excelled in all areas, NGBoost demonstrated the best overall trade-off between calibration accuracy, prediction efficiency, and uncertainty reliability.
+
+**NGBoost Statistics:**
+
+- **Good Uncertainty-Error Correlation (0.469)**: NGBoost showed a good correlation between predicted uncertainty and actual prediction errors among models with reasonable coverage, indicating reliable uncertainty estimates.
+
+- **Optimal Coverage Balance**: 50% coverage (0.473) was closest to the target (0.500), with only a 2.7% deviation. The 95% coverage (0.925) was within acceptable bounds at 2.5% below target.
+
+- **Efficient Prediction Intervals**: NGBoost achieved the second-narrowest interval widths (95%: 3.768, 50%: 1.297) while maintaining reasonable coverage, providing more actionable uncertainty bounds than wider alternatives like Bayesian Ridge.
+
+- **Robust Performance**: Unlike Bootstrap Ensemble, which showed excellent correlation (0.733) but poor coverage (80.6% vs 95% target), NGBoost maintained reliability across both calibration and correlation metrics.
+
+The combination of strong uncertainty-error correlation and balanced coverage makes NGBoost the most reliable choice for practical uncertainty quantification in this application.
+
+## Wrap-Up
+We used AWS Sagemaker to develop, train, deploy, and compare a large set of Uncertainly Quantification Models. The models represented a broad range of approaches and required additional Python libraries (Scikit-Learn, NGBoost, MAPIE, XGBoost). [Model Scripts](https://github.com/brifordwylie/aws_ml_engineer_capstone/blob/main/model_scripts)
 
 ## AWS Artifacts
 Here's some screen shots of the AWS Artifacts created as part of this project
